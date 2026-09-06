@@ -7,6 +7,8 @@
 // @match        https://www.simcompanies.com/*
 // @match        https://simcompanies.com/*
 // @icon         https://www.simcompanies.com/favicon.ico
+// @updateURL    https://github.com/Dwakoz/karmine-tool/raw/refs/heads/main/karmine-corp-simco-toolkit.user.js
+// @downloadURL  https://github.com/Dwakoz/karmine-tool/raw/refs/heads/main/karmine-corp-simco-toolkit.user.js
 // @grant        none
 // @run-at       document-idle
 // ==/UserScript==
