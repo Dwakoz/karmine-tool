@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Karmine Tool (bêta)
 // @namespace    https://github.com/Dwakoz
-// @version      1.0.0
+// @version      1.5.1
 // @description  Extension communautaire pour Sim Companies, développée par le joueur Karmine Corp. Calculateur XP, modérateurs FR et plus à venir.
 // @author       Karmine Corp
 // @match        https://www.simcompanies.com/*
@@ -9,7 +9,8 @@
 // @icon         https://www.simcompanies.com/favicon.ico
 // @updateURL    https://github.com/Dwakoz/karmine-tool/raw/refs/heads/main/karmine-corp-simco-toolkit.user.js
 // @downloadURL  https://github.com/Dwakoz/karmine-tool/raw/refs/heads/main/karmine-corp-simco-toolkit.user.js
-// @grant        none
+// @grant        GM_xmlhttpRequest
+// @connect      api.simcotools.com
 // @run-at       document-idle
 // ==/UserScript==
 
@@ -19,6 +20,11 @@
   if (window.__kcSimcoToolkitLoaded) return;
   window.__kcSimcoToolkitLoaded = true;
 
+  // Rempli après le premier appel réussi à auth-data (voir refreshXpData) et
+  // réutilisé par tous les modules ayant besoin du realm — jamais redemandé
+  // en boucle, pour respecter la limite d'1 requête/5 min du guide officiel.
+  let currentRealmId = null;
+
   // Liste des modules du menu. On y ajoutera une entrée à chaque nouvel
   // outil développé.
   const MENU_ITEMS = [
@@ -27,7 +33,64 @@
       label: 'Modérateurs',
       onSelect: () => openPanel('kc-moderators-panel'),
     },
+    {
+      id: 'market-events',
+      label: 'Alertes marché',
+      onSelect: () => {
+        openPanel('kc-events-panel');
+        refreshMarketEvents();
+      },
+    },
+    {
+      id: 'realm-stats',
+      label: 'Statistiques du royaume',
+      onSelect: () => {
+        openPanel('kc-realmstats-panel');
+        refreshRealmStats();
+      },
+    },
+    {
+      id: 'options',
+      label: 'Options',
+      onSelect: () => openPanel('kc-options-panel'),
+    },
   ];
+
+  // --- Paramètres persistants ---
+  //
+  // L'outil est destiné à toute la communauté, pas seulement aux joueurs
+  // restaurant : les fonctionnalités spécifiques à un type de business
+  // (ex. tag "Ingrédient restaurant") ne doivent s'afficher que si le
+  // joueur l'active lui-même dans les Options. Désactivé par défaut.
+  const SETTINGS_KEY = 'kc_settings_v1';
+  const DEFAULT_SETTINGS = { hasRestaurants: false };
+
+  function loadSettings() {
+    try {
+      const raw = localStorage.getItem(SETTINGS_KEY);
+      return raw ? { ...DEFAULT_SETTINGS, ...JSON.parse(raw) } : { ...DEFAULT_SETTINGS };
+    } catch (err) {
+      return { ...DEFAULT_SETTINGS };
+    }
+  }
+
+  function saveSettings(patch) {
+    const settings = { ...loadSettings(), ...patch };
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    } catch (err) {
+      // stockage indisponible : le réglage ne sera pas mémorisé, sans gravité
+    }
+    return settings;
+  }
+
+  // Ingrédients de restaurant (kind IDs internes du jeu) — utilisés pour
+  // mettre en avant les événements marché qui te concernent directement,
+  // uniquement si le joueur a activé "Je possède des restaurants" dans les
+  // Options. Sans ça, aucune utilité pour les autres types de joueurs.
+  const RESTAURANT_INGREDIENT_IDS = new Set([
+    117, 119, 121, 122, 123, 124, 125, 126, 129, 130, 131, 132, 134, 142, 143,
+  ]);
 
   // Modérateurs francophones de la communauté — profils en jeu pour les
   // contacter directement en cas de besoin.
@@ -283,6 +346,11 @@
       color: #EDE6D8;
       font-weight: 600;
     }
+    .kc-xp-stale {
+      font-size: 11px;
+      color: #9FB0C3;
+      font-style: italic;
+    }
     #kc-xp-recreational:not(:empty) {
       margin-top: 10px;
       padding-top: 10px;
@@ -416,8 +484,368 @@
       outline: 2px solid #E8A33D;
       outline-offset: 2px;
     }
+    #kc-events-panel {
+      position: fixed;
+      top: 108px;
+      right: 16px;
+      width: 300px;
+      max-width: calc(100vw - 48px);
+      max-height: 70vh;
+      overflow-y: auto;
+      background: #10151F;
+      color: #EDE6D8;
+      border-left: 4px solid #E8A33D;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      z-index: 2147483000;
+      transform-origin: top right;
+      transform: scale(0.96);
+      opacity: 0;
+      pointer-events: none;
+      transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.18s ease;
+    }
+    #kc-events-panel.kc-open {
+      transform: scale(1);
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #kc-events-status {
+      display: block;
+      padding: 8px 16px;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 11px;
+      letter-spacing: 0.02em;
+      color: #9FB0C3;
+      background: #1B2436;
+      border-bottom: 1px solid #3E7C74;
+      position: sticky;
+      top: 0;
+    }
+    #kc-events-body {
+      padding: 4px 0;
+    }
+    #kc-events-empty {
+      padding: 16px;
+      font-size: 12px;
+      color: #9FB0C3;
+    }
+    .kc-event-row {
+      padding: 10px 16px;
+      border-bottom: 1px solid #1B2436;
+    }
+    .kc-event-row:last-child {
+      border-bottom: none;
+    }
+    .kc-event-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .kc-event-resource {
+      font-size: 13px;
+      font-weight: 600;
+      color: #EDE6D8;
+    }
+    .kc-event-modifier {
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .kc-event-modifier.kc-positive {
+      color: #6FBF73;
+    }
+    .kc-event-modifier.kc-negative {
+      color: #E06B6B;
+    }
+    .kc-event-sub {
+      margin-top: 2px;
+      font-size: 11px;
+      color: #9FB0C3;
+    }
+    .kc-event-tag {
+      display: inline-block;
+      margin-top: 4px;
+      font-size: 10px;
+      color: #E8A33D;
+      border: 1px solid #3E7C74;
+      padding: 1px 6px;
+    }
+    #kc-events-footer {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 16px 16px;
+      position: sticky;
+      bottom: 0;
+      background: #10151F;
+    }
+    #kc-events-refresh,
+    #kc-events-close {
+      appearance: none;
+      border: 1px solid #3E7C74;
+      background: transparent;
+      color: #EDE6D8;
+      font-size: 12px;
+      padding: 6px 14px;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+    #kc-events-refresh:hover,
+    #kc-events-close:hover {
+      background: #1B2436;
+    }
+    #kc-events-refresh:focus-visible,
+    #kc-events-close:focus-visible {
+      outline: 2px solid #E8A33D;
+      outline-offset: 2px;
+    }
+    #kc-options-panel {
+      position: fixed;
+      top: 108px;
+      right: 16px;
+      width: 300px;
+      max-width: calc(100vw - 48px);
+      background: #10151F;
+      color: #EDE6D8;
+      border-left: 4px solid #E8A33D;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      z-index: 2147483000;
+      transform-origin: top right;
+      transform: scale(0.96);
+      opacity: 0;
+      pointer-events: none;
+      transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.18s ease;
+    }
+    #kc-options-panel.kc-open {
+      transform: scale(1);
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #kc-options-status {
+      display: block;
+      padding: 8px 16px;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 11px;
+      letter-spacing: 0.02em;
+      color: #9FB0C3;
+      background: #1B2436;
+      border-bottom: 1px solid #3E7C74;
+    }
+    #kc-options-body {
+      padding: 16px;
+    }
+    .kc-options-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: #EDE6D8;
+      cursor: pointer;
+    }
+    .kc-options-row input {
+      accent-color: #E8A33D;
+      width: 15px;
+      height: 15px;
+      cursor: pointer;
+    }
+    .kc-options-hint {
+      margin: 10px 0 0;
+      font-size: 11px;
+      line-height: 1.5;
+      color: #9FB0C3;
+    }
+    #kc-options-footer {
+      display: flex;
+      justify-content: flex-end;
+      padding: 0 16px 16px;
+    }
+    #kc-options-close {
+      appearance: none;
+      border: 1px solid #3E7C74;
+      background: transparent;
+      color: #EDE6D8;
+      font-size: 12px;
+      padding: 6px 14px;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+    #kc-options-close:hover {
+      background: #1B2436;
+    }
+    #kc-options-close:focus-visible {
+      outline: 2px solid #E8A33D;
+      outline-offset: 2px;
+    }
+    .kc-vwap-badge {
+      display: inline-block;
+      margin-left: 8px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 1px 6px;
+      border-radius: 4px;
+      white-space: nowrap;
+      vertical-align: middle;
+    }
+    .kc-vwap-badge.kc-vwap-cheap {
+      color: #6FBF73;
+      background: rgba(111, 191, 115, 0.15);
+    }
+    .kc-vwap-badge.kc-vwap-expensive {
+      color: #E06B6B;
+      background: rgba(224, 107, 107, 0.15);
+    }
+    #kc-realmstats-panel {
+      position: fixed;
+      top: 108px;
+      right: 16px;
+      width: 320px;
+      max-width: calc(100vw - 48px);
+      max-height: 75vh;
+      overflow-y: auto;
+      background: #10151F;
+      color: #EDE6D8;
+      border-left: 4px solid #E8A33D;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      z-index: 2147483000;
+      transform-origin: top right;
+      transform: scale(0.96);
+      opacity: 0;
+      pointer-events: none;
+      transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.18s ease;
+    }
+    #kc-realmstats-panel.kc-open {
+      transform: scale(1);
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #kc-realmstats-status {
+      display: block;
+      padding: 8px 16px;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 11px;
+      letter-spacing: 0.02em;
+      color: #9FB0C3;
+      background: #1B2436;
+      border-bottom: 1px solid #3E7C74;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+    #kc-realmstats-summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px 8px;
+    }
+    #kc-realmstats-total {
+      font-size: 13px;
+      color: #C7D0DB;
+    }
+    #kc-realmstats-total strong {
+      color: #EDE6D8;
+    }
+    .kc-phase-badge {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      padding: 2px 8px;
+      border-radius: 999px;
+    }
+    .kc-phase-boom {
+      color: #6FBF73;
+      background: rgba(111, 191, 115, 0.15);
+    }
+    .kc-phase-normal {
+      color: #E8A33D;
+      background: rgba(232, 163, 61, 0.15);
+    }
+    .kc-phase-recession {
+      color: #E06B6B;
+      background: rgba(224, 107, 107, 0.15);
+    }
+    #kc-realmstats-controls {
+      display: flex;
+      gap: 8px;
+      padding: 0 16px 12px;
+    }
+    #kc-realmstats-search {
+      flex: 1;
+      background: #1B2436;
+      border: 1px solid #3E7C74;
+      color: #EDE6D8;
+      font-size: 12px;
+      padding: 5px 8px;
+    }
+    #kc-realmstats-sort {
+      background: #1B2436;
+      border: 1px solid #3E7C74;
+      color: #EDE6D8;
+      font-size: 12px;
+      padding: 5px 4px;
+    }
+    #kc-realmstats-list {
+      padding: 0 16px 16px;
+    }
+    .kc-realmstats-row {
+      margin-bottom: 10px;
+    }
+    .kc-realmstats-row-top {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      margin-bottom: 4px;
+    }
+    .kc-realmstats-row-name {
+      color: #EDE6D8;
+    }
+    .kc-realmstats-row-value {
+      color: #9FB0C3;
+    }
+    .kc-realmstats-bar-track {
+      height: 6px;
+      background: #1B2436;
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .kc-realmstats-bar-fill {
+      height: 100%;
+      background: #E8A33D;
+    }
+    #kc-realmstats-empty {
+      padding: 16px;
+      font-size: 12px;
+      color: #9FB0C3;
+    }
+    #kc-realmstats-footer {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 16px 16px;
+    }
+    #kc-realmstats-refresh,
+    #kc-realmstats-close {
+      appearance: none;
+      border: 1px solid #3E7C74;
+      background: transparent;
+      color: #EDE6D8;
+      font-size: 12px;
+      padding: 6px 14px;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+    #kc-realmstats-refresh:hover,
+    #kc-realmstats-close:hover {
+      background: #1B2436;
+    }
+    #kc-realmstats-refresh:focus-visible,
+    #kc-realmstats-close:focus-visible {
+      outline: 2px solid #E8A33D;
+      outline-offset: 2px;
+    }
     @media (prefers-reduced-motion: reduce) {
-      #kc-toast, #kc-menu-panel, #kc-xp-panel, #kc-moderators-panel {
+      #kc-toast, #kc-menu-panel, #kc-xp-panel, #kc-moderators-panel, #kc-events-panel, #kc-options-panel, #kc-realmstats-panel {
         transition: opacity 0.3s ease;
         transform: none;
       }
@@ -580,7 +1008,7 @@
     // sont invisibles pour le détecteur.
     const shortCycleRegex = /\d+\s*h\s*\d+\s*m|^\s*\d+\s*m\s*$/i;
     const timerRegex = /\d+\s*j\s*\d+\s*h|\d+\s*h\s*\d+\s*m|^\s*\d+\s*m\s*$/i;
-    const qualityRegex = /\d,\d/; // note décimale française, ex. "10,0" ou "7,7"
+    const qualityRegex = /\d[.,]\d/; // note décimale, virgule (FR "10,0") ou point (EN "10.0")
     const all = Array.from(document.querySelectorAll('body *'));
     const timerLeaves = all.filter((el) => el.children.length === 0 && timerRegex.test(el.textContent.trim()));
 
@@ -628,12 +1056,37 @@
     return { activeCount, constructionCount, recreationalCount, xpPerHour };
   }
 
+  const LAST_INSTANT_ESTIMATE_KEY = 'kc_last_instant_estimate_v1';
+  const LAST_INSTANT_ESTIMATE_MAX_AGE_MS = 3 * 60 * 60 * 1000; // au-delà de 3h, trop périmé pour être affiché
+
+  function saveLastInstantEstimate(instant) {
+    try {
+      localStorage.setItem(LAST_INSTANT_ESTIMATE_KEY, JSON.stringify({ ...instant, at: Date.now() }));
+    } catch (err) {
+      // stockage indisponible : pas de cache, sans gravité
+    }
+  }
+
+  function loadLastInstantEstimate() {
+    try {
+      const raw = localStorage.getItem(LAST_INSTANT_ESTIMATE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (Date.now() - parsed.at > LAST_INSTANT_ESTIMATE_MAX_AGE_MS) return null;
+      return parsed;
+    } catch (err) {
+      return null;
+    }
+  }
+
   function refreshXpData() {
     return fetchAuthData()
       .then((data) => {
+        currentRealmId = data.authCompany.realmId; // réutilisé par le module VWAP, jamais redemandé
         const samples = recordXpSample(data.levelInfo);
         const instant = computeInstantXpRate();
         if (instant) {
+          saveLastInstantEstimate(instant);
           renderXpPanel(data.levelInfo, {
             xpPerHour: instant.xpPerHour,
             source: 'instant',
@@ -641,10 +1094,22 @@
             constructionCount: instant.constructionCount,
             recreationalCount: instant.recreationalCount,
           });
-        } else {
-          const measuredRate = computeXpRatePerHour(samples);
-          renderXpPanel(data.levelInfo, measuredRate ? { xpPerHour: measuredRate, source: 'measured' } : null);
+          return;
         }
+        const cached = loadLastInstantEstimate();
+        if (cached) {
+          renderXpPanel(data.levelInfo, {
+            xpPerHour: cached.xpPerHour,
+            source: 'cached',
+            activeCount: cached.activeCount,
+            constructionCount: cached.constructionCount,
+            recreationalCount: cached.recreationalCount,
+            at: cached.at,
+          });
+          return;
+        }
+        const measuredRate = computeXpRatePerHour(samples);
+        renderXpPanel(data.levelInfo, measuredRate ? { xpPerHour: measuredRate, source: 'measured' } : null);
       })
       .catch((err) => {
         console.error('[Karmine Tool] Échec du rafraîchissement XP :', err);
@@ -666,7 +1131,7 @@
     const recreationalEl = panel.querySelector('#kc-xp-recreational');
     if (rateInfo) {
       let rateLabel;
-      if (rateInfo.source === 'instant') {
+      if (rateInfo.source === 'instant' || rateInfo.source === 'cached') {
         const parts = [`${rateInfo.activeCount} actif${rateInfo.activeCount > 1 ? 's' : ''}`];
         if (rateInfo.constructionCount > 0) {
           parts.push(`${rateInfo.constructionCount} en construction`);
@@ -675,6 +1140,10 @@
           parts.push(`${rateInfo.recreationalCount} récréatif${rateInfo.recreationalCount > 1 ? 's' : ''}`);
         }
         rateLabel = `Vitesse : <span>${rateInfo.xpPerHour.toLocaleString('fr-FR')} XP/h</span> (${parts.join(', ')})`;
+        if (rateInfo.source === 'cached') {
+          const ageMinutes = Math.round((Date.now() - rateInfo.at) / 60000);
+          rateLabel += `<br><span class="kc-xp-stale">dernière vue sur la carte il y a ${ageMinutes} min</span>`;
+        }
       } else {
         rateLabel = `Vitesse : <span>${Math.round(rateInfo.xpPerHour).toLocaleString('fr-FR')} XP/h</span> (mesurée)`;
       }
@@ -683,14 +1152,14 @@
       const etaHours = remaining / rateInfo.xpPerHour;
       etaEl.innerHTML = `Niveau suivant dans <span>${formatDuration(etaHours)}</span>`;
     } else {
-      rateEl.textContent = 'Vitesse : collecte des données en cours…';
-      etaEl.textContent = 'Estimation disponible après quelques minutes de jeu.';
+      rateEl.textContent = 'Vitesse : indisponible sur cette page';
+      etaEl.textContent = 'Va sur l’onglet Carte pour une estimation instantanée de tes bâtiments actifs.';
     }
 
     // Champs éditables pour le niveau des bâtiments récréatifs — non
     // détectable automatiquement, on le mémorise une fois saisi.
     if (recreationalEl) {
-      const count = rateInfo && rateInfo.source === 'instant' ? rateInfo.recreationalCount : 0;
+      const count = rateInfo && (rateInfo.source === 'instant' || rateInfo.source === 'cached') ? rateInfo.recreationalCount : 0;
       if (count > 0) {
         const storedLevels = loadRecreationalLevels();
         recreationalEl.innerHTML =
@@ -745,6 +1214,399 @@
     panel.querySelector('#kc-xp-close').addEventListener('click', () => closeAllPanels());
   }
 
+  // --- Badges VWAP sur la Bourse ---
+  //
+  // Sur une page /market/resource/{id}/, chaque ligne d'annonce porte un
+  // attribut aria-label du type "ordre de marché, prix $2,3, quantité 913,
+  // qualité 0, offert par l'entreprise X" — un attribut d'accessibilité,
+  // donc a priori plus stable qu'une classe CSS générée. On en extrait
+  // prix/quantité/qualité sans avoir à déchiffrer l'icône d'étoile.
+  //
+  // On compare chaque prix au VWAP (prix moyen pondéré, API SimcoTools) de
+  // la même qualité, et on affiche un badge si l'écart dépasse ±5%.
+
+  const VWAP_BADGE_THRESHOLD_PCT = 1;
+  const MARKET_ROW_SELECTOR = 'tr[aria-label*="ordre de march"]';
+  const MARKET_ROW_ARIA_REGEX = /prix\s*\$([\d.,]+),\s*quantité\s*(\d+),\s*qualité\s*(\d+)/i;
+
+  function getMarketResourceIdFromUrl() {
+    const match = location.pathname.match(/\/market\/resource\/(\d+)/);
+    return match ? parseInt(match[1], 10) : null;
+  }
+
+  function parseMarketRowAria(row) {
+    const label = row.getAttribute('aria-label') || '';
+    const match = label.match(MARKET_ROW_ARIA_REGEX);
+    if (!match) return null;
+    return {
+      price: parseFloat(match[1].replace(',', '.')),
+      quantity: parseInt(match[2], 10),
+      quality: parseInt(match[3], 10),
+    };
+  }
+
+  function fetchVwapMap(realmId, resourceId) {
+    return gmFetchJson(`https://api.simcotools.com/v1/realms/${realmId}/market/vwaps/${resourceId}`).then((data) => {
+      const list = Array.isArray(data) ? data : Array.isArray(data && data.vwaps) ? data.vwaps : [];
+      const map = {};
+      list.forEach((entry) => {
+        const existing = map[entry.quality];
+        // on garde la donnée la plus récente si plusieurs entrées pour la même qualité
+        if (!existing || new Date(entry.datetime) > new Date(existing.datetime)) {
+          map[entry.quality] = entry;
+        }
+      });
+      const vwapByQuality = {};
+      Object.keys(map).forEach((q) => {
+        vwapByQuality[q] = map[q].vwap;
+      });
+      return vwapByQuality;
+    });
+  }
+
+  const vwapState = { resourceId: null, map: null };
+
+  function applyVwapBadges() {
+    if (!vwapState.map) return;
+    const rows = document.querySelectorAll(MARKET_ROW_SELECTOR);
+    rows.forEach((row) => {
+      if (row.dataset.kcVwapBadge) return;
+      const parsed = parseMarketRowAria(row);
+      if (!parsed) return;
+      const vwap = vwapState.map[parsed.quality];
+      if (vwap == null || vwap <= 0) return;
+
+      const diffPct = ((parsed.price - vwap) / vwap) * 100;
+      row.dataset.kcVwapBadge = '1';
+      if (Math.abs(diffPct) < VWAP_BADGE_THRESHOLD_PCT) return; // écart trop faible, pas de badge
+
+      const priceCell = row.querySelector('td.css-2qga7i') || row.querySelector('td:last-child');
+      if (!priceCell) return;
+      const badge = document.createElement('span');
+      badge.className = `kc-vwap-badge ${diffPct < 0 ? 'kc-vwap-cheap' : 'kc-vwap-expensive'}`;
+      badge.textContent = `${diffPct < 0 ? '🟢' : '🔴'} ${diffPct > 0 ? '+' : ''}${diffPct.toFixed(0)}%`;
+      badge.title = `VWAP (7 jours, qualité ${parsed.quality}) : $${vwap.toFixed(3)}`;
+      priceCell.appendChild(badge);
+    });
+  }
+
+  function refreshVwapForResource(resourceId) {
+    if (currentRealmId == null) return; // pas encore prêt (le calculateur XP n'a pas fini son premier appel) : on retentera
+    fetchVwapMap(currentRealmId, resourceId)
+      .then((map) => {
+        vwapState.resourceId = resourceId;
+        vwapState.map = map;
+        applyVwapBadges();
+      })
+      .catch((err) => console.error('[Karmine Tool] Échec du chargement du VWAP :', err));
+  }
+
+  function checkMarketPage() {
+    const resourceId = getMarketResourceIdFromUrl();
+    if (resourceId == null) return;
+    if (resourceId !== vwapState.resourceId) {
+      refreshVwapForResource(resourceId);
+    } else {
+      applyVwapBadges(); // réapplique sur d'éventuelles nouvelles lignes (tick de prix, défilement) sans appel réseau
+    }
+  }
+
+  // --- Alertes marché (API publique SimcoTools) ---
+  //
+  // api.simcotools.com est un domaine différent de simcompanies.com : un
+  // fetch() classique serait bloqué par le CORS du navigateur. On utilise
+  // GM_xmlhttpRequest, prévu pour ça par Tampermonkey, pour une API 100%
+  // publique et documentée (aucune signature, aucun cookie nécessaire).
+
+  function gmFetchJson(url) {
+    return new Promise((resolve, reject) => {
+      GM_xmlhttpRequest({
+        method: 'GET',
+        url,
+        headers: { 'Accept-Language': 'fr' },
+        onload: (res) => {
+          try {
+            resolve(JSON.parse(res.responseText));
+          } catch (err) {
+            reject(err);
+          }
+        },
+        onerror: reject,
+        ontimeout: reject,
+      });
+    });
+  }
+
+  function fetchMarketEvents(realmId) {
+    return gmFetchJson(`https://api.simcotools.com/v1/realms/${realmId}/events`).then((data) => {
+      if (Array.isArray(data)) return data;
+      if (data && Array.isArray(data.events)) return data.events;
+      return [];
+    });
+  }
+
+  function renderEventRow(event) {
+    const now = Date.now();
+    const untilMs = new Date(event.until).getTime();
+    const hoursLeft = (untilMs - now) / 3_600_000;
+    const modifier = event.speedModifier ?? event.speed_modifier;
+    const resourceName = event.resourceName ?? event.resource_name ?? `Ressource #${event.resource}`;
+    const producedAtName = event.producedAtName ?? event.produced_at_name ?? event.producedAt ?? event.produced_at ?? '';
+    const modifierClass = modifier > 0 ? 'kc-positive' : 'kc-negative';
+    const modifierText = `${modifier > 0 ? '+' : ''}${modifier}%`;
+    const isIngredient = loadSettings().hasRestaurants && RESTAURANT_INGREDIENT_IDS.has(event.resource);
+    return `
+      <div class="kc-event-row">
+        <div class="kc-event-top">
+          <span class="kc-event-resource">${resourceName}</span>
+          <span class="kc-event-modifier ${modifierClass}">${modifierText}</span>
+        </div>
+        <div class="kc-event-sub">${producedAtName} — encore ${formatDuration(hoursLeft)}</div>
+        ${isIngredient ? '<span class="kc-event-tag">🍽️ Ingrédient restaurant</span>' : ''}
+      </div>
+    `;
+  }
+
+  let lastFetchedEvents = [];
+
+  function renderEventsPanel(events) {
+    const panel = document.getElementById('kc-events-panel');
+    if (!panel) return;
+    const body = panel.querySelector('#kc-events-body');
+    const now = Date.now();
+    const active = events
+      .filter((e) => new Date(e.until).getTime() > now)
+      .sort((a, b) => new Date(a.until) - new Date(b.until));
+
+    if (active.length === 0) {
+      body.innerHTML = '<p id="kc-events-empty">Aucun événement en cours sur ce realm actuellement.</p>';
+      return;
+    }
+    body.innerHTML = active.map(renderEventRow).join('');
+  }
+
+  function refreshMarketEvents() {
+    const panel = document.getElementById('kc-events-panel');
+    if (panel) {
+      panel.querySelector('#kc-events-body').innerHTML =
+        '<p id="kc-events-empty">Chargement…</p>';
+    }
+    return fetchAuthData()
+      .then((data) => fetchMarketEvents(data.authCompany.realmId))
+      .then((events) => {
+        lastFetchedEvents = events;
+        renderEventsPanel(events);
+      })
+      .catch((err) => {
+        console.error('[Karmine Tool] Échec du chargement des événements marché :', err);
+        if (panel) {
+          panel.querySelector('#kc-events-body').innerHTML =
+            '<p id="kc-events-empty">Échec du chargement. Réessaie dans un instant.</p>';
+        }
+      });
+  }
+
+  function createEventsPanel() {
+    const panel = document.createElement('div');
+    panel.id = 'kc-events-panel';
+    panel.setAttribute('role', 'status');
+    panel.innerHTML = `
+      <span id="kc-events-status">Karmine Tool — Alertes marché</span>
+      <div id="kc-events-body">
+        <p id="kc-events-empty">Ouvre ce panneau pour charger les événements en cours.</p>
+      </div>
+      <div id="kc-events-footer">
+        <button id="kc-events-refresh" type="button">Actualiser</button>
+        <button id="kc-events-close" type="button">Fermer</button>
+      </div>
+    `;
+    document.body.appendChild(panel);
+    panel.querySelector('#kc-events-refresh').addEventListener('click', () => refreshMarketEvents());
+    panel.querySelector('#kc-events-close').addEventListener('click', () => closeAllPanels());
+  }
+
+  // --- Options ---
+
+  function createOptionsPanel() {
+    const panel = document.createElement('div');
+    panel.id = 'kc-options-panel';
+    panel.setAttribute('role', 'status');
+    const settings = loadSettings();
+    panel.innerHTML = `
+      <span id="kc-options-status">Karmine Tool — Options</span>
+      <div id="kc-options-body">
+        <label class="kc-options-row">
+          <input type="checkbox" id="kc-options-restaurants" ${settings.hasRestaurants ? 'checked' : ''} />
+          <span>Je possède des restaurants</span>
+        </label>
+        <p class="kc-options-hint">
+          Active certains détails spécifiques aux restaurants (ex. le tag
+          "Ingrédient restaurant" dans les Alertes marché). Désactivé, ces
+          détails restent masqués — utile si tu joues un autre type de
+          business.
+        </p>
+      </div>
+      <div id="kc-options-footer">
+        <button id="kc-options-close" type="button">Fermer</button>
+      </div>
+    `;
+    document.body.appendChild(panel);
+
+    panel.querySelector('#kc-options-restaurants').addEventListener('change', (e) => {
+      saveSettings({ hasRestaurants: e.target.checked });
+      renderEventsPanel(lastFetchedEvents); // ré-affiche instantanément sans nouvel appel réseau
+    });
+    panel.querySelector('#kc-options-close').addEventListener('click', () => closeAllPanels());
+  }
+
+  // --- Statistiques du royaume (API publique SimcoTools) ---
+
+  const PHASE_LABELS = {
+    boom: 'Boom',
+    expansion: 'Boom',
+    normal: 'Normale',
+    recession: 'Récession',
+  };
+  const PHASE_CLASSES = {
+    boom: 'kc-phase-boom',
+    expansion: 'kc-phase-boom',
+    normal: 'kc-phase-normal',
+    recession: 'kc-phase-recession',
+  };
+
+  function fetchRealmBuildingStats(realmId) {
+    return gmFetchJson(`https://api.simcotools.com/v1/realms/${realmId}/stats/buildings?disable_pagination=true`);
+  }
+
+  function fetchRealmPhase(realmId) {
+    return gmFetchJson(`https://api.simcotools.com/v1/realms/${realmId}/phases`).then((data) => {
+      // ranges est trié du plus récent au plus ancien : ranges[0] est la
+      // période en cours, celle qui contient la date d'aujourd'hui.
+      if (Array.isArray(data.ranges) && data.ranges.length > 0) return data.ranges[0].phase;
+      return null;
+    });
+  }
+
+  const realmStatsState = { buildings: [], totalBuildings: 0, phase: null, search: '', sort: 'count_desc' };
+
+  function renderRealmStatsList() {
+    const list = document.getElementById('kc-realmstats-list');
+    if (!list) return;
+    const search = realmStatsState.search.trim().toLowerCase();
+    let items = realmStatsState.buildings.filter((b) => b.name.toLowerCase().includes(search));
+
+    const sorters = {
+      count_desc: (a, b) => b.count - a.count,
+      count_asc: (a, b) => a.count - b.count,
+      name_asc: (a, b) => a.name.localeCompare(b.name),
+      name_desc: (a, b) => b.name.localeCompare(a.name),
+    };
+    items = items.slice().sort(sorters[realmStatsState.sort] || sorters.count_desc);
+
+    if (items.length === 0) {
+      list.innerHTML = '<p id="kc-realmstats-empty">Aucun bâtiment ne correspond à la recherche.</p>';
+      return;
+    }
+    const maxCount = Math.max(...items.map((b) => b.count), 1);
+    list.innerHTML = items
+      .map((b) => {
+        const pct = (b.count / maxCount) * 100;
+        const proportionPct = (b.proportion * 100).toFixed(1);
+        return `
+          <div class="kc-realmstats-row">
+            <div class="kc-realmstats-row-top">
+              <span class="kc-realmstats-row-name">${b.name}</span>
+              <span class="kc-realmstats-row-value">${proportionPct}% (${b.count.toLocaleString('fr-FR')})</span>
+            </div>
+            <div class="kc-realmstats-bar-track">
+              <div class="kc-realmstats-bar-fill" style="width:${pct.toFixed(1)}%"></div>
+            </div>
+          </div>
+        `;
+      })
+      .join('');
+  }
+
+  function renderRealmStatsSummary() {
+    const totalEl = document.getElementById('kc-realmstats-total');
+    const phaseEl = document.getElementById('kc-realmstats-phase');
+    if (totalEl) {
+      totalEl.innerHTML = `<strong>${realmStatsState.totalBuildings.toLocaleString('fr-FR')}</strong> bâtiments au total`;
+    }
+    if (phaseEl) {
+      if (realmStatsState.phase) {
+        const key = realmStatsState.phase.toLowerCase();
+        phaseEl.textContent = PHASE_LABELS[key] || realmStatsState.phase;
+        phaseEl.className = `kc-phase-badge ${PHASE_CLASSES[key] || 'kc-phase-normal'}`;
+        phaseEl.style.display = '';
+      } else {
+        phaseEl.style.display = 'none';
+      }
+    }
+  }
+
+  function refreshRealmStats() {
+    const list = document.getElementById('kc-realmstats-list');
+    if (list) list.innerHTML = '<p id="kc-realmstats-empty">Chargement…</p>';
+    if (currentRealmId == null) {
+      if (list) list.innerHTML = '<p id="kc-realmstats-empty">Un instant, en attente des données du jeu…</p>';
+      return;
+    }
+    Promise.all([fetchRealmBuildingStats(currentRealmId), fetchRealmPhase(currentRealmId)])
+      .then(([buildingStats, phase]) => {
+        realmStatsState.buildings = buildingStats.buildings || [];
+        realmStatsState.totalBuildings = buildingStats.total_buildings ?? buildingStats.totalBuildings ?? 0;
+        realmStatsState.phase = phase;
+        renderRealmStatsSummary();
+        renderRealmStatsList();
+      })
+      .catch((err) => {
+        console.error('[Karmine Tool] Échec du chargement des statistiques du royaume :', err);
+        if (list) list.innerHTML = '<p id="kc-realmstats-empty">Échec du chargement. Réessaie dans un instant.</p>';
+      });
+  }
+
+  function createRealmStatsPanel() {
+    const panel = document.createElement('div');
+    panel.id = 'kc-realmstats-panel';
+    panel.setAttribute('role', 'status');
+    panel.innerHTML = `
+      <span id="kc-realmstats-status">Karmine Tool — Statistiques du royaume</span>
+      <div id="kc-realmstats-summary">
+        <span id="kc-realmstats-total">—</span>
+        <span id="kc-realmstats-phase" class="kc-phase-badge kc-phase-normal" style="display:none"></span>
+      </div>
+      <div id="kc-realmstats-controls">
+        <input type="text" id="kc-realmstats-search" placeholder="Rechercher un bâtiment..." />
+        <select id="kc-realmstats-sort">
+          <option value="count_desc">Les plus construits</option>
+          <option value="count_asc">Les moins construits</option>
+          <option value="name_asc">Nom A→Z</option>
+          <option value="name_desc">Nom Z→A</option>
+        </select>
+      </div>
+      <div id="kc-realmstats-list">
+        <p id="kc-realmstats-empty">Ouvre ce panneau pour charger les statistiques.</p>
+      </div>
+      <div id="kc-realmstats-footer">
+        <button id="kc-realmstats-refresh" type="button">Actualiser</button>
+        <button id="kc-realmstats-close" type="button">Fermer</button>
+      </div>
+    `;
+    document.body.appendChild(panel);
+
+    panel.querySelector('#kc-realmstats-search').addEventListener('input', (e) => {
+      realmStatsState.search = e.target.value;
+      renderRealmStatsList();
+    });
+    panel.querySelector('#kc-realmstats-sort').addEventListener('change', (e) => {
+      realmStatsState.sort = e.target.value;
+      renderRealmStatsList();
+    });
+    panel.querySelector('#kc-realmstats-refresh').addEventListener('click', () => refreshRealmStats());
+    panel.querySelector('#kc-realmstats-close').addEventListener('click', () => closeAllPanels());
+  }
+
   // --- Modérateurs (données statiques) ---
 
   function renderModeratorRow(mod) {
@@ -775,7 +1637,7 @@
 
   // --- Gestion commune : ouverture exclusive des panneaux ---
 
-  const OVERLAY_PANEL_IDS = ['kc-menu-panel', 'kc-xp-panel', 'kc-moderators-panel'];
+  const OVERLAY_PANEL_IDS = ['kc-menu-panel', 'kc-xp-panel', 'kc-moderators-panel', 'kc-events-panel', 'kc-options-panel', 'kc-realmstats-panel'];
 
   function closeAllPanels() {
     OVERLAY_PANEL_IDS.forEach((id) => {
@@ -901,6 +1763,9 @@
   createXpPanel();
   createXpToggleButton();
   createModeratorsPanel();
+  createEventsPanel();
+  createOptionsPanel();
+  createRealmStatsPanel();
   const WELCOME_SHOWN_KEY = 'kc_welcome_shown_v1';
   if (!localStorage.getItem(WELCOME_SHOWN_KEY)) {
     showWelcomeToast();
@@ -917,4 +1782,9 @@
   // React) : on retente le calage à quelques reprises après le chargement.
   [0, 500, 1500, 3000].forEach((delay) => setTimeout(positionXpToggleButton, delay));
   window.addEventListener('resize', positionXpToggleButton);
+
+  // Vérifie l'URL/le DOM toutes les 2s pour la page Bourse — aucun appel
+  // réseau tant que la ressource affichée ne change pas.
+  setInterval(checkMarketPage, 2000);
+  checkMarketPage();
 })();
