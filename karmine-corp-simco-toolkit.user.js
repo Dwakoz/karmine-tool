@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Karmine Tool (bêta)
 // @namespace    https://github.com/Dwakoz
-// @version      1.5.1
+// @version      1.6.0
 // @description  Extension communautaire pour Sim Companies, développée par le joueur Karmine Corp. Calculateur XP, modérateurs FR et plus à venir.
 // @author       Karmine Corp
 // @match        https://www.simcompanies.com/*
@@ -35,7 +35,7 @@
     },
     {
       id: 'market-events',
-      label: 'Alertes marché',
+      label: 'Événements',
       onSelect: () => {
         openPanel('kc-events-panel');
         refreshMarketEvents();
@@ -488,7 +488,7 @@
       position: fixed;
       top: 108px;
       right: 16px;
-      width: 300px;
+      width: 380px;
       max-width: calc(100vw - 48px);
       max-height: 70vh;
       overflow-y: auto;
@@ -522,34 +522,47 @@
       top: 0;
     }
     #kc-events-body {
-      padding: 4px 0;
+      padding: 4px 8px;
     }
     #kc-events-empty {
       padding: 16px;
       font-size: 12px;
       color: #9FB0C3;
     }
-    .kc-event-row {
-      padding: 10px 16px;
-      border-bottom: 1px solid #1B2436;
+    .kc-events-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
     }
-    .kc-event-row:last-child {
+    .kc-events-table thead th {
+      text-align: left;
+      padding: 6px 8px;
+      font-size: 10px;
+      font-weight: 600;
+      color: #9FB0C3;
+      border-bottom: 1px solid #3E7C74;
+      position: sticky;
+      top: 0;
+      background: #10151F;
+    }
+    .kc-events-table thead th:not(:first-child) {
+      text-align: right;
+    }
+    .kc-event-row td {
+      padding: 7px 8px;
+      border-bottom: 1px solid #1B2436;
+      white-space: nowrap;
+    }
+    .kc-event-row:last-child td {
       border-bottom: none;
     }
-    .kc-event-top {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-    }
     .kc-event-resource {
-      font-size: 13px;
-      font-weight: 600;
       color: #EDE6D8;
+      white-space: normal !important;
     }
     .kc-event-modifier {
-      font-size: 12px;
       font-weight: 700;
+      text-align: right;
     }
     .kc-event-modifier.kc-positive {
       color: #6FBF73;
@@ -557,18 +570,13 @@
     .kc-event-modifier.kc-negative {
       color: #E06B6B;
     }
-    .kc-event-sub {
-      margin-top: 2px;
-      font-size: 11px;
+    .kc-event-until,
+    .kc-event-since {
       color: #9FB0C3;
+      text-align: right;
     }
     .kc-event-tag {
-      display: inline-block;
-      margin-top: 4px;
-      font-size: 10px;
-      color: #E8A33D;
-      border: 1px solid #3E7C74;
-      padding: 1px 6px;
+      font-size: 11px;
     }
     #kc-events-footer {
       display: flex;
@@ -1311,7 +1319,7 @@
     }
   }
 
-  // --- Alertes marché (API publique SimcoTools) ---
+  // --- Événements (API native du jeu) ---
   //
   // api.simcotools.com est un domaine différent de simcompanies.com : un
   // fetch() classique serait bloqué par le CORS du navigateur. On utilise
@@ -1337,65 +1345,114 @@
     });
   }
 
-  function fetchMarketEvents(realmId) {
-    return gmFetchJson(`https://api.simcotools.com/v1/realms/${realmId}/events`).then((data) => {
-      if (Array.isArray(data)) return data;
-      if (data && Array.isArray(data.events)) return data.events;
-      return [];
+  // Cache des noms de ressources (id → nom), récupéré une fois via SimcoTools
+  // et réutilisé — ce endpoint est simple (id + nom) donc peu de risque du
+  // genre de surprises de nommage rencontrées ailleurs.
+  let resourceNamesCache = null;
+  let resourceNamesCacheRealm = null;
+
+  function fetchResourceNames(realmId) {
+    if (resourceNamesCache && resourceNamesCacheRealm === realmId) {
+      return Promise.resolve(resourceNamesCache);
+    }
+    return gmFetchJson(`https://api.simcotools.com/v1/realms/${realmId}/resources?disable_pagination=true`).then((data) => {
+      const list = Array.isArray(data) ? data : Array.isArray(data.resources) ? data.resources : [];
+      const map = {};
+      list.forEach((r) => {
+        map[r.id] = r.name;
+      });
+      resourceNamesCache = map;
+      resourceNamesCacheRealm = realmId;
+      return map;
     });
   }
 
-  function renderEventRow(event) {
+  function fetchMarketEvents(realmId) {
+    return fetch(`/api/v3/encyclopedia/events/${realmId}/`, { credentials: 'same-origin' })
+      .then((res) => res.json())
+      .then((data) => (Array.isArray(data.events) ? data.events : []));
+  }
+
+  function formatDaysHoursOnly(totalHours) {
+    if (!isFinite(totalHours) || totalHours < 0) return '—';
+    const days = Math.floor(totalHours / 24);
+    const hrs = Math.floor(totalHours % 24);
+    return days > 0 ? `${days}j ${hrs}h` : `${hrs}h`;
+  }
+
+  function formatShortDate(dateStr) {
+    return new Date(dateStr).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' });
+  }
+
+  function renderEventRow(event, resourceNames) {
     const now = Date.now();
     const untilMs = new Date(event.until).getTime();
     const hoursLeft = (untilMs - now) / 3_600_000;
-    const modifier = event.speedModifier ?? event.speed_modifier;
-    const resourceName = event.resourceName ?? event.resource_name ?? `Ressource #${event.resource}`;
-    const producedAtName = event.producedAtName ?? event.produced_at_name ?? event.producedAt ?? event.produced_at ?? '';
+    const modifier = event.speedModifier;
+    const resourceName = resourceNames[event.kind] || `Ressource #${event.kind}`;
     const modifierClass = modifier > 0 ? 'kc-positive' : 'kc-negative';
     const modifierText = `${modifier > 0 ? '+' : ''}${modifier}%`;
-    const isIngredient = loadSettings().hasRestaurants && RESTAURANT_INGREDIENT_IDS.has(event.resource);
+    const isIngredient = loadSettings().hasRestaurants && RESTAURANT_INGREDIENT_IDS.has(event.kind);
     return `
-      <div class="kc-event-row">
-        <div class="kc-event-top">
-          <span class="kc-event-resource">${resourceName}</span>
-          <span class="kc-event-modifier ${modifierClass}">${modifierText}</span>
-        </div>
-        <div class="kc-event-sub">${producedAtName} — encore ${formatDuration(hoursLeft)}</div>
-        ${isIngredient ? '<span class="kc-event-tag">🍽️ Ingrédient restaurant</span>' : ''}
-      </div>
+      <tr class="kc-event-row">
+        <td class="kc-event-resource">${resourceName}${isIngredient ? ' <span class="kc-event-tag">🍽️</span>' : ''}</td>
+        <td class="kc-event-modifier ${modifierClass}">${modifierText}</td>
+        <td class="kc-event-until">${formatDaysHoursOnly(hoursLeft)}</td>
+        <td class="kc-event-since">${formatShortDate(event.since)}</td>
+      </tr>
     `;
   }
 
   let lastFetchedEvents = [];
+  let lastResourceNames = {};
 
-  function renderEventsPanel(events) {
+  function renderEventsPanel(events, resourceNames) {
     const panel = document.getElementById('kc-events-panel');
     if (!panel) return;
     const body = panel.querySelector('#kc-events-body');
     const now = Date.now();
     const active = events
       .filter((e) => new Date(e.until).getTime() > now)
-      .sort((a, b) => new Date(a.until) - new Date(b.until));
+      .sort((a, b) => new Date(b.since) - new Date(a.since));
 
     if (active.length === 0) {
       body.innerHTML = '<p id="kc-events-empty">Aucun événement en cours sur ce realm actuellement.</p>';
       return;
     }
-    body.innerHTML = active.map(renderEventRow).join('');
+    body.innerHTML = `
+      <table class="kc-events-table">
+        <thead>
+          <tr>
+            <th>Ressource</th>
+            <th>Modif.</th>
+            <th>Jusqu'au</th>
+            <th>Depuis</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${active.map((e) => renderEventRow(e, resourceNames)).join('')}
+        </tbody>
+      </table>
+    `;
   }
 
   function refreshMarketEvents() {
     const panel = document.getElementById('kc-events-panel');
     if (panel) {
-      panel.querySelector('#kc-events-body').innerHTML =
-        '<p id="kc-events-empty">Chargement…</p>';
+      panel.querySelector('#kc-events-body').innerHTML = '<p id="kc-events-empty">Chargement…</p>';
     }
-    return fetchAuthData()
-      .then((data) => fetchMarketEvents(data.authCompany.realmId))
-      .then((events) => {
+    if (currentRealmId == null) {
+      if (panel) {
+        panel.querySelector('#kc-events-body').innerHTML =
+          '<p id="kc-events-empty">Un instant, en attente des données du jeu…</p>';
+      }
+      return Promise.resolve();
+    }
+    return Promise.all([fetchMarketEvents(currentRealmId), fetchResourceNames(currentRealmId)])
+      .then(([events, resourceNames]) => {
         lastFetchedEvents = events;
-        renderEventsPanel(events);
+        lastResourceNames = resourceNames;
+        renderEventsPanel(events, resourceNames);
       })
       .catch((err) => {
         console.error('[Karmine Tool] Échec du chargement des événements marché :', err);
@@ -1411,7 +1468,7 @@
     panel.id = 'kc-events-panel';
     panel.setAttribute('role', 'status');
     panel.innerHTML = `
-      <span id="kc-events-status">Karmine Tool — Alertes marché</span>
+      <span id="kc-events-status">Karmine Tool — Événements</span>
       <div id="kc-events-body">
         <p id="kc-events-empty">Ouvre ce panneau pour charger les événements en cours.</p>
       </div>
@@ -1441,7 +1498,7 @@
         </label>
         <p class="kc-options-hint">
           Active certains détails spécifiques aux restaurants (ex. le tag
-          "Ingrédient restaurant" dans les Alertes marché). Désactivé, ces
+          "Ingrédient restaurant" dans les Événements). Désactivé, ces
           détails restent masqués — utile si tu joues un autre type de
           business.
         </p>
