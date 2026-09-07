@@ -18,7 +18,10 @@ Extension communautaire (script Tampermonkey) pour Sim Companies, développée p
 
 ## Retours et bugs
 
-Une idée ou un bug à signaler ? Ouvre une Issue sur ce repo.
+Une idée ou un bug à signaler ? Deux options :
+
+- Ouvre une Issue sur ce repo
+- Contacte-moi directement en jeu : KARMINE CORP (https://www.simcompanies.com/fr/company/0/KARMINE-CORP/)
 
 ---
 
