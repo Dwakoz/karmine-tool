@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Karmine Tool (bêta)
 // @namespace    https://github.com/Dwakoz
-// @version      1.6.0
+// @version      1.10.0
 // @description  Extension communautaire pour Sim Companies, développée par le joueur Karmine Corp. Calculateur XP, modérateurs FR et plus à venir.
 // @author       Karmine Corp
 // @match        https://www.simcompanies.com/*
@@ -50,6 +50,24 @@
       },
     },
     {
+      id: 'seasons',
+      label: 'Saisons',
+      onSelect: () => openPanel('kc-seasons-panel'),
+    },
+    {
+      id: 'market-prices',
+      label: 'Prix du marché',
+      onSelect: () => {
+        openPanel('kc-prices-panel');
+        refreshMarketPrices();
+      },
+    },
+    {
+      id: 'external-tools',
+      label: 'Outils externes',
+      onSelect: () => openPanel('kc-externaltools-panel'),
+    },
+    {
       id: 'options',
       label: 'Options',
       onSelect: () => openPanel('kc-options-panel'),
@@ -63,7 +81,7 @@
   // (ex. tag "Ingrédient restaurant") ne doivent s'afficher que si le
   // joueur l'active lui-même dans les Options. Désactivé par défaut.
   const SETTINGS_KEY = 'kc_settings_v1';
-  const DEFAULT_SETTINGS = { hasRestaurants: false };
+  const DEFAULT_SETTINGS = { hasRestaurants: false, colorFilterEnabled: false, colorFilterHue: 0 };
 
   function loadSettings() {
     try {
@@ -84,6 +102,28 @@
     return settings;
   }
 
+  // --- Filtre de couleur ---
+  //
+  // Le jeu n'utilise pas de variables CSS centralisées pour ses couleurs
+  // (vérifié : aucune trouvée hors Font Awesome), donc reteindre chaque
+  // élément un par un serait fragile (classes générées, changent à chaque
+  // mise à jour). On applique à la place un filtre CSS global sur le
+  // conteneur du jeu (#root) uniquement — jamais sur nos propres panneaux,
+  // qui sont ajoutés en dehors de #root.
+
+  function applyColorFilter() {
+    const settings = loadSettings();
+    let styleEl = document.getElementById('kc-color-filter-style');
+    if (!styleEl) {
+      styleEl = document.createElement('style');
+      styleEl.id = 'kc-color-filter-style';
+      document.head.appendChild(styleEl);
+    }
+    styleEl.textContent = settings.colorFilterEnabled
+      ? `#root { filter: hue-rotate(${settings.colorFilterHue}deg); }`
+      : '';
+  }
+
   // Ingrédients de restaurant (kind IDs internes du jeu) — utilisés pour
   // mettre en avant les événements marché qui te concernent directement,
   // uniquement si le joueur a activé "Je possède des restaurants" dans les
@@ -92,11 +132,33 @@
     117, 119, 121, 122, 123, 124, 125, 126, 129, 130, 131, 132, 134, 142, 143,
   ]);
 
+  // Données des saisons — confirmées sur la page encyclopédie officielle du
+  // jeu (/fr/encyclopedia/{realm}/seasons/), qui ne passe pas par une API
+  // mais affiche des dates codées en dur côté client. À remettre à jour à
+  // la main d'une année sur l'autre (le Ramadan en particulier suit le
+  // calendrier lunaire).
+  const SEASONS_DATA = {
+    production: [{ name: "Récolte d'automne", emoji: '🎃', dates: '', slug: 'production-seasons', key: 'AutumnHarvest' }],
+    retail: [
+      { name: 'Ramadan', emoji: '🌙', dates: '18 février – 19 mars', slug: 'retail-seasons', key: 'Ramadan' },
+      { name: 'Pâques', emoji: '🐰', dates: '2 avril – 12 avril', slug: 'retail-seasons', key: 'Easter' },
+      { name: 'Été', emoji: '🍦', dates: '8 juillet – 29 août', slug: 'retail-seasons', key: 'Summer' },
+      { name: 'Halloween', emoji: '🎃', dates: '10 octobre – 5 novembre', slug: 'retail-seasons', key: 'Halloween' },
+      { name: 'Noël', emoji: '🎄', dates: '1 décembre – 27 décembre', slug: 'retail-seasons', key: 'Xmas' },
+    ],
+  };
+
   // Modérateurs francophones de la communauté — profils en jeu pour les
   // contacter directement en cas de besoin.
   const MODERATORS_DATA = [
     { name: 'Fuego Corp', url: 'https://www.simcompanies.com/fr/company/0/Fuego-Corp/' },
     { name: 'Tools and Co', url: 'https://www.simcompanies.com/fr/company/0/Tools-and-Co/' },
+  ];
+
+  // Outils externes communautaires — simples liens de référence, pas du code.
+  const EXTERNAL_TOOLS_DATA = [
+    { name: 'SimcoTools', url: 'https://simcotools.com/fr/' },
+    { name: 'Cooper Inc', url: 'https://cooperinc.xyz/' },
   ];
 
   const STYLE = `
@@ -484,6 +546,64 @@
       outline: 2px solid #E8A33D;
       outline-offset: 2px;
     }
+    #kc-externaltools-panel {
+      position: fixed;
+      top: 108px;
+      right: 16px;
+      width: 280px;
+      max-width: calc(100vw - 48px);
+      background: #10151F;
+      color: #EDE6D8;
+      border-left: 4px solid #E8A33D;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      z-index: 2147483000;
+      transform-origin: top right;
+      transform: scale(0.96);
+      opacity: 0;
+      pointer-events: none;
+      transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.18s ease;
+    }
+    #kc-externaltools-panel.kc-open {
+      transform: scale(1);
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #kc-externaltools-status {
+      display: block;
+      padding: 8px 16px;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 11px;
+      letter-spacing: 0.02em;
+      color: #9FB0C3;
+      background: #1B2436;
+      border-bottom: 1px solid #3E7C74;
+    }
+    #kc-externaltools-body {
+      padding: 4px 0;
+    }
+    #kc-externaltools-footer {
+      display: flex;
+      justify-content: flex-end;
+      padding: 8px 16px 16px;
+    }
+    #kc-externaltools-close {
+      appearance: none;
+      border: 1px solid #3E7C74;
+      background: transparent;
+      color: #EDE6D8;
+      font-size: 12px;
+      padding: 6px 14px;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+    #kc-externaltools-close:hover {
+      background: #1B2436;
+    }
+    #kc-externaltools-close:focus-visible {
+      outline: 2px solid #E8A33D;
+      outline-offset: 2px;
+    }
     #kc-events-panel {
       position: fixed;
       top: 108px;
@@ -661,6 +781,22 @@
       font-size: 11px;
       line-height: 1.5;
       color: #9FB0C3;
+    }
+    .kc-options-hue-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 8px;
+    }
+    .kc-options-hue-row input[type='range'] {
+      flex: 1;
+      accent-color: #E8A33D;
+    }
+    #kc-options-hue-value {
+      font-size: 12px;
+      color: #EDE6D8;
+      min-width: 32px;
+      text-align: right;
     }
     #kc-options-footer {
       display: flex;
@@ -852,8 +988,253 @@
       outline: 2px solid #E8A33D;
       outline-offset: 2px;
     }
+    #kc-seasons-panel {
+      position: fixed;
+      top: 108px;
+      right: 16px;
+      width: 300px;
+      max-width: calc(100vw - 48px);
+      max-height: 75vh;
+      overflow-y: auto;
+      background: #10151F;
+      color: #EDE6D8;
+      border-left: 4px solid #E8A33D;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      z-index: 2147483000;
+      transform-origin: top right;
+      transform: scale(0.96);
+      opacity: 0;
+      pointer-events: none;
+      transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.18s ease;
+    }
+    #kc-seasons-panel.kc-open {
+      transform: scale(1);
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #kc-seasons-status {
+      display: block;
+      padding: 8px 16px;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 11px;
+      letter-spacing: 0.02em;
+      color: #9FB0C3;
+      background: #1B2436;
+      border-bottom: 1px solid #3E7C74;
+      position: sticky;
+      top: 0;
+    }
+    #kc-seasons-body {
+      padding: 12px 16px 4px;
+    }
+    .kc-seasons-group-title {
+      margin: 8px 0 6px;
+      font-size: 11px;
+      color: #9FB0C3;
+    }
+    .kc-season-card {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: #1B2436;
+      border-radius: 4px;
+      padding: 10px 12px;
+      margin-bottom: 8px;
+      text-decoration: none;
+      color: inherit;
+      transition: background 0.15s ease;
+    }
+    .kc-season-card:hover {
+      background: #24304A;
+    }
+    .kc-season-emoji {
+      font-size: 22px;
+      line-height: 1;
+    }
+    .kc-season-info {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .kc-season-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: #EDE6D8;
+    }
+    .kc-season-dates {
+      font-size: 11px;
+      color: #9FB0C3;
+    }
+    #kc-seasons-footer {
+      display: flex;
+      justify-content: flex-end;
+      padding: 4px 16px 16px;
+    }
+    #kc-seasons-close {
+      appearance: none;
+      border: 1px solid #3E7C74;
+      background: transparent;
+      color: #EDE6D8;
+      font-size: 12px;
+      padding: 6px 14px;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+    #kc-seasons-close:hover {
+      background: #1B2436;
+    }
+    #kc-seasons-close:focus-visible {
+      outline: 2px solid #E8A33D;
+      outline-offset: 2px;
+    }
+    #kc-prices-panel {
+      position: fixed;
+      top: 108px;
+      right: 16px;
+      width: 300px;
+      max-width: calc(100vw - 48px);
+      max-height: 75vh;
+      overflow-y: auto;
+      background: #10151F;
+      color: #EDE6D8;
+      border-left: 4px solid #E8A33D;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      z-index: 2147483000;
+      transform-origin: top right;
+      transform: scale(0.96);
+      opacity: 0;
+      pointer-events: none;
+      transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.18s ease;
+    }
+    #kc-prices-panel.kc-open {
+      transform: scale(1);
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #kc-prices-status {
+      display: block;
+      padding: 8px 16px;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 11px;
+      letter-spacing: 0.02em;
+      color: #9FB0C3;
+      background: #1B2436;
+      border-bottom: 1px solid #3E7C74;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+    #kc-prices-hint {
+      margin: 8px 16px 0;
+      font-size: 11px;
+      color: #9FB0C3;
+    }
+    #kc-prices-controls {
+      display: flex;
+      gap: 8px;
+      padding: 10px 16px 8px;
+    }
+    #kc-prices-search {
+      flex: 1;
+      background: #1B2436;
+      border: 1px solid #3E7C74;
+      color: #EDE6D8;
+      font-size: 12px;
+      padding: 5px 8px;
+    }
+    #kc-prices-sort {
+      background: #1B2436;
+      border: 1px solid #3E7C74;
+      color: #EDE6D8;
+      font-size: 12px;
+      padding: 5px 4px;
+    }
+    #kc-prices-body {
+      padding: 0 8px;
+    }
+    #kc-prices-empty {
+      padding: 10px 8px 16px;
+      font-size: 12px;
+      color: #9FB0C3;
+    }
+    .kc-prices-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    .kc-prices-table thead th {
+      text-align: left;
+      padding: 6px 8px;
+      font-size: 10px;
+      font-weight: 600;
+      color: #9FB0C3;
+      border-bottom: 1px solid #3E7C74;
+    }
+    .kc-prices-table thead th:not(:first-child) {
+      text-align: right;
+    }
+    .kc-prices-table td {
+      padding: 6px 8px;
+      border-bottom: 1px solid #1B2436;
+    }
+    .kc-price-resource {
+      color: #EDE6D8;
+    }
+    .kc-price-resource a {
+      color: inherit;
+      text-decoration: none;
+    }
+    .kc-price-resource a:hover {
+      color: #E8A33D;
+      text-decoration: underline;
+    }
+    .kc-price-value {
+      color: #9FB0C3;
+      text-align: right;
+      white-space: nowrap;
+    }
+    .kc-price-trend {
+      text-align: right;
+      font-weight: 700;
+    }
+    .kc-price-trend.kc-positive {
+      color: #6FBF73;
+    }
+    .kc-price-trend.kc-negative {
+      color: #E06B6B;
+    }
+    #kc-prices-footer {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 16px 16px;
+      position: sticky;
+      bottom: 0;
+      background: #10151F;
+    }
+    #kc-prices-refresh,
+    #kc-prices-close {
+      appearance: none;
+      border: 1px solid #3E7C74;
+      background: transparent;
+      color: #EDE6D8;
+      font-size: 12px;
+      padding: 6px 14px;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+    #kc-prices-refresh:hover,
+    #kc-prices-close:hover {
+      background: #1B2436;
+    }
+    #kc-prices-refresh:focus-visible,
+    #kc-prices-close:focus-visible {
+      outline: 2px solid #E8A33D;
+      outline-offset: 2px;
+    }
     @media (prefers-reduced-motion: reduce) {
-      #kc-toast, #kc-menu-panel, #kc-xp-panel, #kc-moderators-panel, #kc-events-panel, #kc-options-panel, #kc-realmstats-panel {
+      #kc-toast, #kc-menu-panel, #kc-xp-panel, #kc-moderators-panel, #kc-events-panel, #kc-options-panel, #kc-realmstats-panel, #kc-seasons-panel, #kc-prices-panel, #kc-externaltools-panel {
         transition: opacity 0.3s ease;
         transform: none;
       }
@@ -972,6 +1353,128 @@
 
   function fetchAuthData() {
     return fetch('/api/v3/companies/auth-data/', { credentials: 'same-origin' }).then((res) => res.json());
+  }
+
+  // --- Prix du marché (API native market-ticker + noms via SimcoTools) ---
+
+  function fetchMarketTicker(realmId) {
+    return fetch(`/api/v3/market-ticker/${realmId}/`, { credentials: 'same-origin' }).then((res) => res.json());
+  }
+
+  function formatTickerPrice(price) {
+    const decimals = price < 10 ? 3 : 2;
+    return price.toLocaleString('fr-FR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+  }
+
+  const pricesState = { items: [], search: '', sort: 'name_asc' };
+
+  function renderPricesList() {
+    const body = document.getElementById('kc-prices-body');
+    if (!body) return;
+    const search = pricesState.search.trim().toLowerCase();
+    let items = pricesState.items.filter((it) => it.name.toLowerCase().includes(search));
+
+    const sorters = {
+      name_asc: (a, b) => a.name.localeCompare(b.name),
+      name_desc: (a, b) => b.name.localeCompare(a.name),
+      price_desc: (a, b) => b.price - a.price,
+      price_asc: (a, b) => a.price - b.price,
+    };
+    items = items.slice().sort(sorters[pricesState.sort] || sorters.name_asc);
+
+    if (items.length === 0) {
+      body.innerHTML = '<p id="kc-prices-empty">Aucune ressource ne correspond à la recherche.</p>';
+      return;
+    }
+    body.innerHTML = `
+      <table class="kc-prices-table">
+        <thead>
+          <tr>
+            <th>Ressource</th>
+            <th>Prix</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${items
+            .map((it) => {
+              const realmId = currentRealmId == null ? 0 : currentRealmId;
+              const url = `https://simcotools.com/fr/market/${realmId}/${it.kind}`;
+              return `
+                <tr>
+                  <td class="kc-price-resource">
+                    <a href="${url}" target="_blank" rel="noopener noreferrer">${it.name}</a>
+                  </td>
+                  <td class="kc-price-value">$${formatTickerPrice(it.price)}</td>
+                  <td class="kc-price-trend ${it.isUp ? 'kc-positive' : 'kc-negative'}">${it.isUp ? '↗' : '↘'}</td>
+                </tr>
+              `;
+            })
+            .join('')}
+        </tbody>
+      </table>
+    `;
+  }
+
+  function refreshMarketPrices() {
+    const body = document.getElementById('kc-prices-body');
+    if (body) body.innerHTML = '<p id="kc-prices-empty">Chargement…</p>';
+    if (currentRealmId == null) {
+      if (body) body.innerHTML = '<p id="kc-prices-empty">Un instant, en attente des données du jeu…</p>';
+      return Promise.resolve();
+    }
+    return Promise.all([fetchMarketTicker(currentRealmId), fetchResourceNames(currentRealmId)])
+      .then(([ticker, resourceNames]) => {
+        pricesState.items = ticker.map((it) => ({
+          kind: it.kind,
+          name: resourceNames[it.kind] || `Ressource #${it.kind}`,
+          price: it.price,
+          isUp: it.is_up,
+        }));
+        renderPricesList();
+      })
+      .catch((err) => {
+        console.error('[Karmine Tool] Échec du chargement des prix du marché :', err);
+        if (body) body.innerHTML = '<p id="kc-prices-empty">Échec du chargement. Réessaie dans un instant.</p>';
+      });
+  }
+
+  function createPricesPanel() {
+    const panel = document.createElement('div');
+    panel.id = 'kc-prices-panel';
+    panel.setAttribute('role', 'status');
+    panel.innerHTML = `
+      <span id="kc-prices-status">Karmine Tool — Prix du marché</span>
+      <p id="kc-prices-hint">Prix le plus bas actuellement affiché, toutes qualités confondues.</p>
+      <div id="kc-prices-controls">
+        <input type="text" id="kc-prices-search" placeholder="Rechercher une ressource..." />
+        <select id="kc-prices-sort">
+          <option value="name_asc">Nom A→Z</option>
+          <option value="name_desc">Nom Z→A</option>
+          <option value="price_desc">Prix décroissant</option>
+          <option value="price_asc">Prix croissant</option>
+        </select>
+      </div>
+      <div id="kc-prices-body">
+        <p id="kc-prices-empty">Ouvre ce panneau pour charger les prix.</p>
+      </div>
+      <div id="kc-prices-footer">
+        <button id="kc-prices-refresh" type="button">Actualiser</button>
+        <button id="kc-prices-close" type="button">Fermer</button>
+      </div>
+    `;
+    document.body.appendChild(panel);
+
+    panel.querySelector('#kc-prices-search').addEventListener('input', (e) => {
+      pricesState.search = e.target.value;
+      renderPricesList();
+    });
+    panel.querySelector('#kc-prices-sort').addEventListener('change', (e) => {
+      pricesState.sort = e.target.value;
+      renderPricesList();
+    });
+    panel.querySelector('#kc-prices-refresh').addEventListener('click', () => refreshMarketPrices());
+    panel.querySelector('#kc-prices-close').addEventListener('click', () => closeAllPanels());
   }
 
   // --- Estimation instantanée basée sur les bâtiments actifs (DOM) ---
@@ -1502,6 +2005,28 @@
           détails restent masqués — utile si tu joues un autre type de
           business.
         </p>
+        <label class="kc-options-row">
+          <input type="checkbox" id="kc-options-color-filter" ${settings.colorFilterEnabled ? 'checked' : ''} />
+          <span>Filtre de couleur sur le jeu</span>
+        </label>
+        <div class="kc-options-hue-row">
+          <input
+            type="range"
+            id="kc-options-hue"
+            min="0"
+            max="360"
+            step="1"
+            value="${settings.colorFilterHue}"
+            ${settings.colorFilterEnabled ? '' : 'disabled'}
+          />
+          <span id="kc-options-hue-value">${settings.colorFilterHue}°</span>
+        </div>
+        <p class="kc-options-hint">
+          Teinte globale appliquée sur le jeu (pas sur cet outil). Le jeu
+          n'ayant pas de palette centralisée, c'est un filtre uniforme
+          plutôt qu'un reskin précis — un effet "filtre" plus qu'un vrai
+          thème sur-mesure.
+        </p>
       </div>
       <div id="kc-options-footer">
         <button id="kc-options-close" type="button">Fermer</button>
@@ -1513,6 +2038,21 @@
       saveSettings({ hasRestaurants: e.target.checked });
       renderEventsPanel(lastFetchedEvents); // ré-affiche instantanément sans nouvel appel réseau
     });
+
+    const hueInput = panel.querySelector('#kc-options-hue');
+    const hueValueLabel = panel.querySelector('#kc-options-hue-value');
+
+    panel.querySelector('#kc-options-color-filter').addEventListener('change', (e) => {
+      saveSettings({ colorFilterEnabled: e.target.checked });
+      hueInput.disabled = !e.target.checked;
+      applyColorFilter();
+    });
+    hueInput.addEventListener('input', (e) => {
+      hueValueLabel.textContent = `${e.target.value}°`;
+      saveSettings({ colorFilterHue: parseInt(e.target.value, 10) });
+      applyColorFilter();
+    });
+
     panel.querySelector('#kc-options-close').addEventListener('click', () => closeAllPanels());
   }
 
@@ -1664,6 +2204,42 @@
     panel.querySelector('#kc-realmstats-close').addEventListener('click', () => closeAllPanels());
   }
 
+  // --- Saisons (données statiques, confirmées via l'encyclopédie du jeu) ---
+
+  function renderSeasonCard(season) {
+    const realmId = currentRealmId == null ? 0 : currentRealmId;
+    const url = `https://www.simcompanies.com/fr/encyclopedia/${realmId}/${season.slug}/${season.key}/`;
+    return `
+      <a class="kc-season-card" href="${url}" target="_blank" rel="noopener noreferrer">
+        <span class="kc-season-emoji">${season.emoji}</span>
+        <div class="kc-season-info">
+          <span class="kc-season-name">${season.name}</span>
+          ${season.dates ? `<span class="kc-season-dates">${season.dates}</span>` : ''}
+        </div>
+      </a>
+    `;
+  }
+
+  function createSeasonsPanel() {
+    const panel = document.createElement('div');
+    panel.id = 'kc-seasons-panel';
+    panel.setAttribute('role', 'status');
+    panel.innerHTML = `
+      <span id="kc-seasons-status">Karmine Tool — Saisons</span>
+      <div id="kc-seasons-body">
+        <p class="kc-seasons-group-title">Production</p>
+        ${SEASONS_DATA.production.map(renderSeasonCard).join('')}
+        <p class="kc-seasons-group-title">Vente</p>
+        ${SEASONS_DATA.retail.map(renderSeasonCard).join('')}
+      </div>
+      <div id="kc-seasons-footer">
+        <button id="kc-seasons-close" type="button">Fermer</button>
+      </div>
+    `;
+    document.body.appendChild(panel);
+    panel.querySelector('#kc-seasons-close').addEventListener('click', () => closeAllPanels());
+  }
+
   // --- Modérateurs (données statiques) ---
 
   function renderModeratorRow(mod) {
@@ -1692,9 +2268,37 @@
     panel.querySelector('#kc-moderators-close').addEventListener('click', () => closeAllPanels());
   }
 
+  // --- Outils externes (liens communautaires) ---
+
+  function renderExternalToolRow(tool) {
+    return `
+      <a class="kc-moderator-row" href="${tool.url}" target="_blank" rel="noopener noreferrer">
+        <span class="kc-moderator-name">${tool.name}</span>
+        <span class="kc-moderator-sub">${tool.url.replace(/^https?:\/\//, '')}</span>
+      </a>
+    `;
+  }
+
+  function createExternalToolsPanel() {
+    const panel = document.createElement('div');
+    panel.id = 'kc-externaltools-panel';
+    panel.setAttribute('role', 'status');
+    panel.innerHTML = `
+      <span id="kc-externaltools-status">Karmine Tool — Outils externes</span>
+      <div id="kc-externaltools-body">
+        ${EXTERNAL_TOOLS_DATA.map(renderExternalToolRow).join('')}
+      </div>
+      <div id="kc-externaltools-footer">
+        <button id="kc-externaltools-close" type="button">Fermer</button>
+      </div>
+    `;
+    document.body.appendChild(panel);
+    panel.querySelector('#kc-externaltools-close').addEventListener('click', () => closeAllPanels());
+  }
+
   // --- Gestion commune : ouverture exclusive des panneaux ---
 
-  const OVERLAY_PANEL_IDS = ['kc-menu-panel', 'kc-xp-panel', 'kc-moderators-panel', 'kc-events-panel', 'kc-options-panel', 'kc-realmstats-panel'];
+  const OVERLAY_PANEL_IDS = ['kc-menu-panel', 'kc-xp-panel', 'kc-moderators-panel', 'kc-events-panel', 'kc-options-panel', 'kc-realmstats-panel', 'kc-seasons-panel', 'kc-prices-panel', 'kc-externaltools-panel'];
 
   function closeAllPanels() {
     OVERLAY_PANEL_IDS.forEach((id) => {
@@ -1822,7 +2426,11 @@
   createModeratorsPanel();
   createEventsPanel();
   createOptionsPanel();
+  applyColorFilter();
   createRealmStatsPanel();
+  createSeasonsPanel();
+  createPricesPanel();
+  createExternalToolsPanel();
   const WELCOME_SHOWN_KEY = 'kc_welcome_shown_v1';
   if (!localStorage.getItem(WELCOME_SHOWN_KEY)) {
     showWelcomeToast();
