@@ -10,11 +10,15 @@ Extension communautaire (script Tampermonkey) pour Sim Companies, développée p
 
 ## Fonctionnalités
 
-- Calculateur XP : vitesse d'XP/heure et temps estimé avant le niveau suivant, calculé instantanément à partir des bâtiments actifs sur la carte
-- Badges VWAP sur la Bourse : repère en un coup d'oeil les annonces sous ou au-dessus du prix moyen du marché
-- Alertes marché : événements en cours affectant la production ou la vente de ressources sur ton realm
-- Statistiques du royaume : répartition des bâtiments et phase économique en cours
+- Calculateur XP : vitesse d'XP/heure et temps estimé avant le niveau suivant, calculé instantanément à partir des bâtiments actifs sur la carte (production, construction, récréatifs)
+- Badges VWAP sur la Bourse : repère en un coup d'oeil les annonces sous ou au-dessus du prix moyen du marché, par qualité
+- Événements : tableau des événements de production/vente en cours sur ton realm (ressource, modificateur, dates), identique à l'encyclopédie du jeu
+- Statistiques du royaume : répartition des bâtiments et phase économique en cours, avec recherche et tri
+- Saisons : dates des saisons de production et de vente, avec lien direct vers la page encyclopédie de chacune
+- Prix du marché : les prix les plus bas de toutes les ressources en un coup d'oeil, avec recherche, tri, et lien direct vers SimcoTools pour chaque ressource
+- Outils externes : accès rapide à SimcoTools et Cooper Inc
 - Annuaire des modérateurs francophones
+- Options : mode restaurant (affiche des détails spécifiques si activé) et filtre de couleur réglable sur le jeu
 
 ## Retours et bugs
 
