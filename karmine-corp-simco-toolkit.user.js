@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Karmine Tool (bêta)
 // @namespace    https://github.com/Dwakoz
-// @version      1.11.0
+// @version      1.11.2
 // @description  Extension communautaire pour Sim Companies, développée par le joueur Karmine Corp. Calculateur XP, modérateurs FR et plus à venir.
 // @author       Karmine Corp
 // @match        https://www.simcompanies.com/*
@@ -1668,6 +1668,7 @@
     let activeCount = 0;
     let constructionCount = 0;
     let recreationalCount = 0;
+    const recreationalNames = [];
 
     timerLeaves.forEach((el) => {
       let node = el;
@@ -1682,11 +1683,33 @@
       }
       if (!container || countedContainers.has(container)) return;
       countedContainers.add(container);
-      // Le texte propre de la minuterie vient du leaf (le conteneur mélange
-      // souvent minuterie + note qualité sans séparateur, ex. "59m10,0100").
+
+      // L'aria-label du jeu ("Temple : Entretien, ..." / "R11 : Amélioration,
+      // ...") est plus fiable que le format de durée seul : une grosse
+      // amélioration (>24h) s'affiche aussi en "Xj Yh", donc le format ne
+      // suffit pas à distinguer un vrai bâtiment récréatif d'une simple
+      // construction longue.
+      const labeledEl = container.querySelector('[aria-label]');
+      const actionLabel = labeledEl ? labeledEl.getAttribute('aria-label') || '' : '';
+      if (/entretien/i.test(actionLabel)) {
+        recreationalCount += 1;
+        // Le nom du bâtiment est donné avant le ":" ("Temple: Entretien, ...").
+        const nameMatch = actionLabel.match(/^([^:]+):/);
+        recreationalNames.push(nameMatch ? nameMatch[1].trim() : `Bâtiment récréatif #${recreationalCount}`);
+        return;
+      }
+      if (/am[ée]lioration/i.test(actionLabel)) {
+        constructionCount += 1;
+        return;
+      }
+
+      // Repli si aucun aria-label reconnu : on retombe sur l'ancienne
+      // heuristique par format, en traitant un format "jours" isolé comme
+      // une construction plutôt qu'un récréatif (plus fréquent, évite de
+      // sur-compter les récréatifs par erreur).
       const leafText = el.textContent.trim();
       if (dayFormatRegex.test(leafText)) {
-        recreationalCount += 1;
+        constructionCount += 1;
       } else if (shortCycleRegex.test(leafText) && qualityRegex.test(container.textContent)) {
         activeCount += 1;
       } else if (shortCycleRegex.test(leafText)) {
@@ -1705,7 +1728,7 @@
 
     const xpPerHour =
       activeCount * ACTIVE_BUILDING_XP_PER_HOUR + constructionCount * CONSTRUCTION_XP_PER_HOUR + recreationalXpPerHour;
-    return { activeCount, constructionCount, recreationalCount, xpPerHour };
+    return { activeCount, constructionCount, recreationalCount, recreationalNames, xpPerHour };
   }
 
   const LAST_INSTANT_ESTIMATE_KEY = 'kc_last_instant_estimate_v1';
@@ -1745,6 +1768,7 @@
             activeCount: instant.activeCount,
             constructionCount: instant.constructionCount,
             recreationalCount: instant.recreationalCount,
+            recreationalNames: instant.recreationalNames,
           });
           return;
         }
@@ -1756,6 +1780,7 @@
             activeCount: cached.activeCount,
             constructionCount: cached.constructionCount,
             recreationalCount: cached.recreationalCount,
+            recreationalNames: cached.recreationalNames,
             at: cached.at,
           });
           return;
@@ -1814,14 +1839,16 @@
       const count = rateInfo && (rateInfo.source === 'instant' || rateInfo.source === 'cached') ? rateInfo.recreationalCount : 0;
       if (count > 0) {
         const storedLevels = loadRecreationalLevels();
+        const names = (rateInfo && rateInfo.recreationalNames) || [];
         recreationalEl.innerHTML =
           '<p class="kc-xp-recreational-label">Niveau des bâtiments récréatifs :</p>' +
           Array.from({ length: count })
             .map((_, i) => {
               const level = storedLevels[i] || 1;
+              const label = names[i] || `Bâtiment récréatif #${i + 1}`;
               return `
                 <label class="kc-xp-recreational-row">
-                  <span>Bâtiment récréatif #${i + 1}</span>
+                  <span>${label}</span>
                   <input type="number" min="1" step="1" value="${level}" data-recreational-index="${i}" />
                 </label>
               `;
