@@ -1403,16 +1403,31 @@
     // On cherche l'élément dont le prix affiché correspond à la valeur du
     // prix unitaire déjà extraite de l'aria-label — plus fiable que de
     // chercher un caractère précis, qui peut être coupé entre deux noeuds
-    // de texte selon la mise en page.
-    const candidates = Array.from(row.querySelectorAll('*')).filter((el) => el.children.length === 0);
-    for (const el of candidates) {
+    // de texte selon la mise en page. On ne se limite plus aux éléments
+    // sans enfants : certaines lignes ont une icône de tendance (flèche)
+    // à côté du prix, ce qui en fait un élément non-feuille.
+    const candidates = Array.from(row.querySelectorAll('*')).filter((el) => {
+      const text = el.textContent.trim();
+      return text.length > 0 && text.length < 40;
+    });
+    let best = null;
+    candidates.forEach((el) => {
       const match = el.textContent.trim().match(/\$?\s*([\d\s]+[.,]\d+|\d+)/);
-      if (!match) continue;
+      if (!match) return;
       const normalized = match[1].replace(/\s/g, '').replace(',', '.');
       const num = parseFloat(normalized);
-      if (!isNaN(num) && Math.abs(num - unitPrice) < 0.5) return el;
+      if (isNaN(num) || Math.abs(num - unitPrice) >= 0.5) return;
+      // Parmi les correspondances, on garde la plus spécifique (texte le
+      // plus court) pour éviter d'accrocher un conteneur trop large.
+      if (!best || el.textContent.trim().length < best.textContent.trim().length) best = el;
+    });
+    if (!best) {
+      console.warn(
+        `[Karmine Tool] Aucune correspondance de prix trouvée (attendu ${unitPrice}). Textes candidats :`,
+        candidates.map((el) => el.textContent.trim()).filter((t) => t)
+      );
     }
-    return null;
+    return best;
   }
 
   function applyContractVwapBadges(byName) {
