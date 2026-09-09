@@ -12,6 +12,7 @@ Extension communautaire (script Tampermonkey) pour Sim Companies, développée p
 
 - Calculateur XP : vitesse d'XP/heure et temps estimé avant le niveau suivant, calculé instantanément à partir des bâtiments actifs sur la carte (production, construction, récréatifs)
 - Badges VWAP sur la Bourse : repère en un coup d'oeil les annonces sous ou au-dessus du prix moyen du marché, par qualité
+- Badges VWAP sur les contrats entrants : même repère directement sur les contrats d'achat reçus dans l'Entrepôt
 - Événements : tableau des événements de production/vente en cours sur ton realm (ressource, modificateur, dates), identique à l'encyclopédie du jeu
 - Statistiques du royaume : répartition des bâtiments et phase économique en cours, avec recherche et tri
 - Saisons : dates des saisons de production et de vente, avec lien direct vers la page encyclopédie de chacune
@@ -19,6 +20,40 @@ Extension communautaire (script Tampermonkey) pour Sim Companies, développée p
 - Outils externes : accès rapide à SimcoTools et Cooper Inc
 - Annuaire des modérateurs francophones
 - Options : mode restaurant (affiche des détails spécifiques si activé) et filtre de couleur réglable sur le jeu
+
+## Aperçu
+
+**Menu**
+
+![Menu Karmine Tool](Karmine%20Tool.png)
+
+**Calculateur XP**
+
+![Calculateur XP](XP.png)
+
+**Badges VWAP sur la Bourse**
+
+![Badges VWAP Bourse](Badge%20Bourse.png)
+
+**Badges VWAP sur les contrats entrants**
+
+![Badges VWAP contrats](Badge%20contrat.png)
+
+**Événements**
+
+![Événements](Evenement.png)
+
+**Statistiques du royaume**
+
+![Statistiques du royaume](Stats%20Royaume.png)
+
+**Saisons**
+
+![Saisons](Saisons.png)
+
+**Prix du marché**
+
+![Prix du marché](Prix%20du%20march%C3%A9.png)
 
 ## Retours et bugs
 
