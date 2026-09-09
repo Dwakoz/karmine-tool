@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Karmine Tool (bêta)
 // @namespace    https://github.com/Dwakoz
-// @version      1.10.0
+// @version      1.11.0
 // @description  Extension communautaire pour Sim Companies, développée par le joueur Karmine Corp. Calculateur XP, modérateurs FR et plus à venir.
 // @author       Karmine Corp
 // @match        https://www.simcompanies.com/*
@@ -830,6 +830,8 @@
       border-radius: 4px;
       white-space: nowrap;
       vertical-align: middle;
+      text-decoration: none;
+      cursor: pointer;
     }
     .kc-vwap-badge.kc-vwap-cheap {
       color: #6FBF73;
@@ -1353,6 +1355,130 @@
 
   function fetchAuthData() {
     return fetch('/api/v3/companies/auth-data/', { credentials: 'same-origin' }).then((res) => res.json());
+  }
+
+  // --- Badges VWAP sur les contrats entrants ---
+  //
+  // Sur /headquarters/warehouse/incoming-contracts/, chaque contrat porte un
+  // aria-label du type "Contrat entrant, 2000 Samoussa qualité 12, à 1340$
+  // par unité, prix total 2680000$, de la part de fannnnnjh" — le nom de la
+  // ressource est donné en toutes lettres (pas un ID), donc on le fait
+  // correspondre à la liste des noms de ressources (déjà en cache pour les
+  // Événements/Prix du marché) pour retrouver l'ID nécessaire au VWAP.
+
+  const CONTRACT_ROW_SELECTOR = 'div[aria-label^="Contrat entrant"]';
+  const CONTRACT_ARIA_REGEX = /Contrat entrant,\s*[\d\s]+\s+(.+?)\s+qualité\s*(\d+),\s*à\s*([\d.,]+)\$\s*par unité/i;
+
+  const contractVwapCache = {}; // clé "realmId:resourceId" → map qualité→vwap
+  let resourceKindByNameCache = null;
+  let resourceKindByNameCacheRealm = null;
+
+  function ensureResourceKindByName(realmId) {
+    if (resourceKindByNameCache && resourceKindByNameCacheRealm === realmId) {
+      return Promise.resolve(resourceKindByNameCache);
+    }
+    return fetchResourceNames(realmId).then((namesByKind) => {
+      const byName = {};
+      Object.keys(namesByKind).forEach((kind) => {
+        byName[namesByKind[kind].trim().toLowerCase()] = parseInt(kind, 10);
+      });
+      resourceKindByNameCache = byName;
+      resourceKindByNameCacheRealm = realmId;
+      return byName;
+    });
+  }
+
+  function parseContractAria(el) {
+    const label = el.getAttribute('aria-label') || '';
+    const match = label.match(CONTRACT_ARIA_REGEX);
+    if (!match) return null;
+    return {
+      resourceName: match[1].trim(),
+      quality: parseInt(match[2], 10),
+      unitPrice: parseFloat(match[3].replace(',', '.')),
+    };
+  }
+
+  function findUnitPriceElement(row, unitPrice) {
+    // On cherche l'élément dont le prix affiché correspond à la valeur du
+    // prix unitaire déjà extraite de l'aria-label — plus fiable que de
+    // chercher un caractère précis, qui peut être coupé entre deux noeuds
+    // de texte selon la mise en page.
+    const candidates = Array.from(row.querySelectorAll('*')).filter((el) => el.children.length === 0);
+    for (const el of candidates) {
+      const match = el.textContent.trim().match(/\$?\s*([\d\s]+[.,]\d+|\d+)/);
+      if (!match) continue;
+      const normalized = match[1].replace(/\s/g, '').replace(',', '.');
+      const num = parseFloat(normalized);
+      if (!isNaN(num) && Math.abs(num - unitPrice) < 0.5) return el;
+    }
+    return null;
+  }
+
+  function applyContractVwapBadges(byName) {
+    const realmId = currentRealmId == null ? 0 : currentRealmId;
+    const rows = document.querySelectorAll(CONTRACT_ROW_SELECTOR);
+    rows.forEach((row) => {
+      if (row.dataset.kcVwapBadge) return;
+      const parsed = parseContractAria(row);
+      if (!parsed) return;
+      const resourceId = byName[parsed.resourceName.toLowerCase()];
+      if (resourceId == null) return; // nom non reconnu dans le cache, on ignore plutôt que de deviner
+
+      const cacheKey = `${realmId}:${resourceId}`;
+      const useVwapMap = (vwapMap) => {
+        row.dataset.kcVwapBadge = '1';
+        const vwap = vwapMap[parsed.quality];
+        if (vwap == null || vwap <= 0) return;
+        const diffPct = ((parsed.unitPrice - vwap) / vwap) * 100;
+        if (Math.abs(diffPct) < VWAP_BADGE_THRESHOLD_PCT) return;
+        const badge = document.createElement('a');
+        badge.href = `https://simcotools.com/fr/market/${realmId}/${resourceId}`;
+        badge.target = '_blank';
+        badge.rel = 'noopener noreferrer';
+        badge.className = `kc-vwap-badge ${diffPct < 0 ? 'kc-vwap-cheap' : 'kc-vwap-expensive'}`;
+        badge.textContent = `${diffPct < 0 ? '🟢' : '🔴'} ${diffPct > 0 ? '+' : ''}${diffPct.toFixed(0)}%`;
+        badge.title = `VWAP (7 jours, qualité ${parsed.quality}) : $${vwap.toFixed(3)} — voir sur SimcoTools`;
+        const anchor = findUnitPriceElement(row, parsed.unitPrice);
+        if (anchor) {
+          // Positionnement absolu calculé depuis la position réelle du prix
+          // à l'écran : la ligne semble utiliser une mise en page grille/
+          // flex qui replace tout enfant inséré à la fin, peu importe où on
+          // l'insère dans le DOM. On contourne ça en superposant le badge
+          // directement aux bonnes coordonnées plutôt que de compter sur
+          // l'ordre normal du flux.
+          const rowPosition = getComputedStyle(row).position;
+          if (rowPosition === 'static') row.style.position = 'relative';
+          badge.style.position = 'absolute';
+          const anchorRect = anchor.getBoundingClientRect();
+          const rowRect = row.getBoundingClientRect();
+          badge.style.left = `${Math.round(anchorRect.right - rowRect.left + 6)}px`;
+          badge.style.top = `${Math.round(anchorRect.top - rowRect.top + (anchorRect.height - 16) / 2)}px`;
+          row.appendChild(badge);
+        } else {
+          row.appendChild(badge); // repli si le prix n'est pas retrouvé dans le DOM
+        }
+      };
+
+      if (contractVwapCache[cacheKey]) {
+        useVwapMap(contractVwapCache[cacheKey]);
+      } else {
+        row.dataset.kcVwapBadge = '1'; // évite de relancer 10 fois le même appel pendant le chargement
+        fetchVwapMap(realmId, resourceId)
+          .then((vwapMap) => {
+            contractVwapCache[cacheKey] = vwapMap;
+            row.dataset.kcVwapBadge = '';
+            useVwapMap(vwapMap);
+          })
+          .catch((err) => console.error('[Karmine Tool] Échec du VWAP pour un contrat entrant :', err));
+      }
+    });
+  }
+
+  function checkIncomingContractsPage() {
+    if (!location.pathname.includes('/warehouse/incoming-contracts/')) return;
+    if (currentRealmId == null) return; // pas encore prêt : on retentera au prochain cycle
+    ensureResourceKindByName(currentRealmId).then((byName) => applyContractVwapBadges(byName));
   }
 
   // --- Prix du marché (API native market-ticker + noms via SimcoTools) ---
@@ -2452,4 +2578,8 @@
   // réseau tant que la ressource affichée ne change pas.
   setInterval(checkMarketPage, 2000);
   checkMarketPage();
+
+  // Même principe pour les contrats entrants (VWAP par contrat).
+  setInterval(checkIncomingContractsPage, 2000);
+  checkIncomingContractsPage();
 })();
