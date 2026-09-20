@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Karmine Tool (bêta)
 // @namespace    https://github.com/Dwakoz
-// @version      1.17.0
+// @version      1.17.2
 // @description  Extension communautaire pour Sim Companies, développée par le joueur Karmine Corp. Calculateur XP, modérateurs FR et plus à venir.
 // @author       Karmine Corp
 // @match        https://www.simcompanies.com/*
@@ -114,6 +114,12 @@
     chatInputTextColorAlpha: 100,
     resourceTickerScrollbarColorAlpha: 100,
     pageBgColorAlpha: 100,
+    topBarColor: '#222222',
+    topBarColorAlpha: 100,
+    bottomBarColor: '#222222',
+    bottomBarColorAlpha: 100,
+    statBarTextColor: '#FFFFFF',
+    statBarTextColorAlpha: 100,
   };
 
   function loadSettings() {
@@ -257,6 +263,9 @@
         textarea[placeholder*="crire ici"] { background: ${c.chatInputBgColor} !important; color: ${c.chatInputTextColor} !important; }
         .css-1k853ki { background: ${c.resourceTickerScrollbarColor} !important; }
         body { background: ${c.pageBgColor} !important; }
+        .navbar-fixed-top { background: ${c.topBarColor} !important; }
+        .css-15rmbqw { background: ${c.bottomBarColor} !important; }
+        .css-1tkqeqv { color: ${c.statBarTextColor} !important; }
         #root ::-webkit-scrollbar { width: 10px; height: 10px; }
         #root ::-webkit-scrollbar-track { background: transparent; }
         #root ::-webkit-scrollbar-thumb { background: ${c.chatScrollbarColor} !important; border-radius: 6px; }
@@ -2422,6 +2431,9 @@
     { id: 'input-text', settingKey: 'chatInputTextColor', label: 'Texte — zone de saisie' },
     { id: 'hover-bg', settingKey: 'resourceTickerScrollbarColor', label: 'Barre de défilement — bandeau de ressources' },
     { id: 'page-bg', settingKey: 'pageBgColor', label: 'Fond de la page (tout le jeu)' },
+    { id: 'top-bar', settingKey: 'topBarColor', label: 'Barre du haut' },
+    { id: 'bottom-bar', settingKey: 'bottomBarColor', label: 'Barre du bas (Carte/Entrepôt/...)' },
+    { id: 'stat-bar-text', settingKey: 'statBarTextColor', label: 'Texte des barres (argent/XP/simboost)' },
     { id: 'scrollbar', settingKey: 'chatScrollbarColor', label: 'Barre de défilement (tout le jeu)' },
   ];
 
