@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Karmine Tool (bêta)
 // @namespace    https://github.com/Dwakoz
-// @version      1.15.3
+// @version      1.16.0
 // @description  Extension communautaire pour Sim Companies, développée par le joueur Karmine Corp. Calculateur XP, modérateurs FR et plus à venir.
 // @author       Karmine Corp
 // @match        https://www.simcompanies.com/*
@@ -98,7 +98,7 @@
     chatScrollbarColor: '#E8A33D',
     chatInputBgColor: '#333333',
     chatInputTextColor: '#FFFFFF',
-    chatHoverBgColor: '#3C8CB6',
+    resourceTickerScrollbarColor: '#3C8CB6',
     pageBgColor: '#333333',
   };
 
@@ -225,13 +225,90 @@
         .css-12lfnwr { color: ${settings.chatTimestampColor} !important; }
         .well-header { color: ${settings.chatSectionHeaderColor} !important; }
         textarea[placeholder*="crire ici"] { background: ${settings.chatInputBgColor} !important; color: ${settings.chatInputTextColor} !important; }
-        .css-1k853ki:hover { background: ${settings.chatHoverBgColor} !important; }
+        .css-1k853ki { background: ${settings.resourceTickerScrollbarColor} !important; }
         body { background: ${settings.pageBgColor} !important; }
         #root ::-webkit-scrollbar { width: 10px; height: 10px; }
         #root ::-webkit-scrollbar-track { background: transparent; }
         #root ::-webkit-scrollbar-thumb { background: ${settings.chatScrollbarColor} !important; border-radius: 6px; }
       `
       : '';
+  }
+
+  // --- Fond d'écran personnalisé (carte) ---
+  //
+  // Stocké séparément des autres réglages (pas dans SETTINGS_KEY) car une
+  // image encodée peut être volumineuse — on ne veut pas risquer de faire
+  // échouer la sauvegarde des couleurs du chat si le quota est dépassé.
+  // #page est un vrai identifiant du jeu (pas une classe générée), donc
+  // plus stable que le reste de nos sélecteurs.
+
+  const CUSTOM_BG_KEY = 'kc_custom_background_v1';
+  const CUSTOM_BG_MAX_FILE_SIZE = 3 * 1024 * 1024; // 3 Mo
+
+  function loadCustomBackground() {
+    try {
+      return localStorage.getItem(CUSTOM_BG_KEY);
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function saveCustomBackground(dataUrl) {
+    try {
+      localStorage.setItem(CUSTOM_BG_KEY, dataUrl);
+      return true;
+    } catch (err) {
+      return false; // quota dépassé : on prévient l'utilisateur plutôt que d'échouer en silence
+    }
+  }
+
+  function removeCustomBackground() {
+    try {
+      localStorage.removeItem(CUSTOM_BG_KEY);
+    } catch (err) {
+      // rien à faire de plus
+    }
+  }
+
+  function applyCustomBackground() {
+    let styleEl = document.getElementById('kc-custom-bg-style');
+    if (!styleEl) {
+      styleEl = document.createElement('style');
+      styleEl.id = 'kc-custom-bg-style';
+      document.head.appendChild(styleEl);
+    }
+    const dataUrl = loadCustomBackground();
+    styleEl.textContent = dataUrl
+      ? `
+        #page {
+          background-image: url("${dataUrl}") !important;
+          background-size: cover !important;
+          background-position: center center !important;
+          background-repeat: no-repeat !important;
+          background-attachment: fixed !important;
+        }
+      `
+      : '';
+  }
+
+  function handleCustomBackgroundFile(file, onDone) {
+    if (!file) return;
+    if (file.size > CUSTOM_BG_MAX_FILE_SIZE) {
+      alert('Image trop lourde (max environ 3 Mo). Choisis une image plus légère.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const ok = saveCustomBackground(reader.result);
+      if (!ok) {
+        alert("Échec de l'enregistrement : l'image est trop volumineuse pour le stockage disponible. Essaie une image plus légère.");
+        return;
+      }
+      applyCustomBackground();
+      if (onDone) onDone();
+    };
+    reader.onerror = () => alert("Échec de la lecture de l'image. Réessaie avec un autre fichier.");
+    reader.readAsDataURL(file);
   }
 
   // Ingrédients de restaurant (kind IDs internes du jeu) — utilisés pour
@@ -2298,7 +2375,7 @@
     { id: 'section-header', settingKey: 'chatSectionHeaderColor', label: 'En-têtes de section (Salons/Contacts)' },
     { id: 'input-bg', settingKey: 'chatInputBgColor', label: 'Fond — zone de saisie' },
     { id: 'input-text', settingKey: 'chatInputTextColor', label: 'Texte — zone de saisie' },
-    { id: 'hover-bg', settingKey: 'chatHoverBgColor', label: 'Fond au survol (salons/contacts)' },
+    { id: 'hover-bg', settingKey: 'resourceTickerScrollbarColor', label: 'Barre de défilement — bandeau de ressources' },
     { id: 'page-bg', settingKey: 'pageBgColor', label: 'Fond de la page (tout le jeu)' },
     { id: 'scrollbar', settingKey: 'chatScrollbarColor', label: 'Barre de défilement (tout le jeu)' },
   ];
@@ -2308,6 +2385,7 @@
     panel.id = 'kc-options-panel';
     panel.setAttribute('role', 'status');
     const settings = loadSettings();
+    const hasCustomBg = !!loadCustomBackground();
     panel.innerHTML = `
       <span id="kc-options-status">Karmine Tool — Options</span>
       <div id="kc-options-body">
@@ -2380,12 +2458,37 @@
           gravité si ça arrive, la personnalisation cesse juste de
           s'appliquer.
         </p>
+        <label class="kc-options-row" style="margin-top:14px;">
+          <span>Fond d'écran personnalisé (carte)</span>
+        </label>
+        <input type="file" id="kc-options-bg-file" accept="image/*" style="margin-top:8px;width:100%;font-size:11px;color:#C7D0DB;" />
+        <button id="kc-options-bg-remove" type="button" class="kc-options-reset-btn" ${hasCustomBg ? '' : 'disabled'} style="margin-top:8px;">
+          Retirer l'image
+        </button>
+        <p class="kc-options-hint">
+          Remplace le fond de la carte par une image de ton choix (max
+          environ 3 Mo). S'appuie sur #page, un identifiant du jeu plutôt
+          qu'une classe générée — plus stable.
+        </p>
       </div>
       <div id="kc-options-footer">
         <button id="kc-options-close" type="button">Fermer</button>
       </div>
     `;
     document.body.appendChild(panel);
+
+    panel.querySelector('#kc-options-bg-file').addEventListener('change', (e) => {
+      const file = e.target.files && e.target.files[0];
+      handleCustomBackgroundFile(file, () => {
+        panel.querySelector('#kc-options-bg-remove').disabled = false;
+      });
+    });
+    panel.querySelector('#kc-options-bg-remove').addEventListener('click', () => {
+      removeCustomBackground();
+      applyCustomBackground();
+      panel.querySelector('#kc-options-bg-remove').disabled = true;
+      panel.querySelector('#kc-options-bg-file').value = '';
+    });
 
     panel.querySelector('#kc-options-restaurants').addEventListener('change', (e) => {
       saveSettings({ hasRestaurants: e.target.checked });
@@ -2813,6 +2916,7 @@
   createOptionsPanel();
   applyColorFilter();
   applyChatColors();
+  applyCustomBackground();
   createRealmStatsPanel();
   createSeasonsPanel();
   createPricesPanel();
