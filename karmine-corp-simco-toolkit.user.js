@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Karmine Tool (bêta)
 // @namespace    https://github.com/Dwakoz
-// @version      1.11.2
+// @version      1.15.3
 // @description  Extension communautaire pour Sim Companies, développée par le joueur Karmine Corp. Calculateur XP, modérateurs FR et plus à venir.
 // @author       Karmine Corp
 // @match        https://www.simcompanies.com/*
@@ -81,7 +81,26 @@
   // (ex. tag "Ingrédient restaurant") ne doivent s'afficher que si le
   // joueur l'active lui-même dans les Options. Désactivé par défaut.
   const SETTINGS_KEY = 'kc_settings_v1';
-  const DEFAULT_SETTINGS = { hasRestaurants: false, colorFilterEnabled: false, colorFilterHue: 0 };
+  const DEFAULT_SETTINGS = {
+    hasRestaurants: false,
+    colorFilterEnabled: false,
+    colorFilterHue: 0,
+    faviconEnabled: false,
+    chatColorsEnabled: false,
+    chatOwnBubbleColor: '#1E749C',
+    chatOwnTextColor: '#CCCCCC',
+    chatConversationBgColor: '#222222',
+    chatOtherBubbleColor: '#333333',
+    chatOtherBubbleTextColor: '#F2F2F2',
+    chatSenderNameColor: '#777777',
+    chatTimestampColor: '#777777',
+    chatSectionHeaderColor: '#F2F2F2',
+    chatScrollbarColor: '#E8A33D',
+    chatInputBgColor: '#333333',
+    chatInputTextColor: '#FFFFFF',
+    chatHoverBgColor: '#3C8CB6',
+    pageBgColor: '#333333',
+  };
 
   function loadSettings() {
     try {
@@ -121,6 +140,97 @@
     }
     styleEl.textContent = settings.colorFilterEnabled
       ? `#root { filter: hue-rotate(${settings.colorFilterHue}deg); }`
+      : '';
+  }
+
+  // --- Favicon dynamique (niveau) ---
+  //
+  // Purement cosmétique : affiche ton niveau actuel directement dans
+  // l'icône de l'onglet, dessiné à la volée sur un <canvas>. On mémorise
+  // le favicon d'origine pour le restaurer proprement si désactivé.
+  //
+  // Chrome ne rafraîchit pas toujours l'onglet si on se contente de
+  // changer le href d'un <link> existant : il faut le supprimer et en
+  // recréer un neuf à chaque application pour forcer la mise à jour.
+
+  let originalFaviconHref = null;
+  let lastKnownLevel = null;
+
+  function setFaviconHref(href) {
+    document.querySelectorAll('link[rel~="icon"]').forEach((el) => el.remove());
+    const link = document.createElement('link');
+    link.rel = 'icon';
+    link.href = href;
+    document.head.appendChild(link);
+  }
+
+  function applyDynamicFavicon(level) {
+    const settings = loadSettings();
+    if (originalFaviconHref == null) {
+      const existing = document.querySelector('link[rel~="icon"]');
+      originalFaviconHref = (existing && existing.href) || '/favicon.ico';
+    }
+
+    if (!settings.faviconEnabled || level == null) {
+      setFaviconHref(originalFaviconHref);
+      return;
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 32;
+    canvas.height = 32;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#E8A33D';
+    ctx.fillRect(0, 0, 32, 32);
+    ctx.fillStyle = '#10151F';
+    ctx.font = 'bold 15px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(String(level), 16, 17);
+    setFaviconHref(canvas.toDataURL('image/png'));
+  }
+
+  // --- Personnalisation des couleurs du chat ---
+  //
+  // Repéré par inspection manuelle (pas de sélecteur stable type aria-label
+  // disponible ici, contrairement au reste du jeu) :
+  // - .css-4hxmqy  = bulle de TES messages envoyés (fond + texte)
+  // - .css-1h4m491 = bulle des messages des AUTRES joueurs
+  // - .css-15aq8s1 = fond de la conversation + pseudo dans le titre
+  // - .css-50zrmy  = pseudo de l'expéditeur (au-dessus de chaque message,
+  //   dans les salons publics)
+  // - .css-12lfnwr = horodatage ("il y a X minutes")
+  // - .well-header = en-têtes de section ("SALONS DE CHAT", "CONTACTS") —
+  //   celle-ci n'est PAS générée aléatoirement (nom de classe stable,
+  //   reliquat Bootstrap), donc plus fiable que les autres.
+  // Les classes .css-XXXXX sont générées par le framework du jeu : elles
+  // peuvent changer à sa prochaine mise à jour. Sans gravité si ça arrive —
+  // la personnalisation cesse juste de s'appliquer, rien ne casse pour
+  // autant (contrairement à une refonte de mise en page).
+
+  function applyChatColors() {
+    const settings = loadSettings();
+    let styleEl = document.getElementById('kc-chat-colors-style');
+    if (!styleEl) {
+      styleEl = document.createElement('style');
+      styleEl.id = 'kc-chat-colors-style';
+      document.head.appendChild(styleEl);
+    }
+    styleEl.textContent = settings.chatColorsEnabled
+      ? `
+        .css-4hxmqy { background: ${settings.chatOwnBubbleColor} !important; color: ${settings.chatOwnTextColor} !important; }
+        .css-1h4m491 { background: ${settings.chatOtherBubbleColor} !important; color: ${settings.chatOtherBubbleTextColor} !important; }
+        .css-15aq8s1 { background: ${settings.chatConversationBgColor} !important; }
+        .css-50zrmy { color: ${settings.chatSenderNameColor} !important; }
+        .css-12lfnwr { color: ${settings.chatTimestampColor} !important; }
+        .well-header { color: ${settings.chatSectionHeaderColor} !important; }
+        textarea[placeholder*="crire ici"] { background: ${settings.chatInputBgColor} !important; color: ${settings.chatInputTextColor} !important; }
+        .css-1k853ki:hover { background: ${settings.chatHoverBgColor} !important; }
+        body { background: ${settings.pageBgColor} !important; }
+        #root ::-webkit-scrollbar { width: 10px; height: 10px; }
+        #root ::-webkit-scrollbar-track { background: transparent; }
+        #root ::-webkit-scrollbar-thumb { background: ${settings.chatScrollbarColor} !important; border-radius: 6px; }
+      `
       : '';
   }
 
@@ -732,6 +842,8 @@
       right: 16px;
       width: 300px;
       max-width: calc(100vw - 48px);
+      max-height: 80vh;
+      overflow-y: auto;
       background: #10151F;
       color: #EDE6D8;
       border-left: 4px solid #E8A33D;
@@ -758,6 +870,9 @@
       color: #9FB0C3;
       background: #1B2436;
       border-bottom: 1px solid #3E7C74;
+      position: sticky;
+      top: 0;
+      z-index: 1;
     }
     #kc-options-body {
       padding: 16px;
@@ -797,6 +912,51 @@
       color: #EDE6D8;
       min-width: 32px;
       text-align: right;
+    }
+    .kc-options-chat-colors-grid {
+      margin-top: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .kc-options-color-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 12px;
+      color: #C7D0DB;
+      cursor: pointer;
+    }
+    .kc-options-color-row input[type='color'] {
+      width: 32px;
+      height: 22px;
+      padding: 0;
+      border: 1px solid #3E7C74;
+      background: transparent;
+      cursor: pointer;
+    }
+    .kc-options-color-row input[type='color']:disabled {
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
+    .kc-options-reset-btn {
+      appearance: none;
+      margin-top: 8px;
+      border: 1px solid #3E7C74;
+      background: transparent;
+      color: #EDE6D8;
+      font-size: 11px;
+      padding: 5px 10px;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+    .kc-options-reset-btn:hover:not(:disabled) {
+      background: #1B2436;
+    }
+    .kc-options-reset-btn:disabled {
+      cursor: not-allowed;
+      opacity: 0.5;
     }
     #kc-options-footer {
       display: flex;
@@ -1654,41 +1814,20 @@
   }
 
   function computeInstantXpRate() {
-    const dayFormatRegex = /\d+\s*j\s*\d+\s*h/i;
-    // Sous la barre d'1h restante, le jeu affiche juste "59m" sans le "h" —
-    // il faut accepter ce format en plus de "Xh Ym", sinon ces bâtiments
-    // sont invisibles pour le détecteur.
-    const shortCycleRegex = /\d+\s*h\s*\d+\s*m|^\s*\d+\s*m\s*$/i;
-    const timerRegex = /\d+\s*j\s*\d+\s*h|\d+\s*h\s*\d+\s*m|^\s*\d+\s*m\s*$/i;
-    const qualityRegex = /\d[.,]\d/; // note décimale, virgule (FR "10,0") ou point (EN "10.0")
-    const all = Array.from(document.querySelectorAll('body *'));
-    const timerLeaves = all.filter((el) => el.children.length === 0 && timerRegex.test(el.textContent.trim()));
+    // Chaque bâtiment porte un aria-label explicite et fiable, peu importe
+    // le type de commerce (restaurant, magasin électronique, etc.) :
+    // "R1: Ouvert, 2h, 53min" (actif), "R7: Amélioration, 7h, 16min"
+    // (construction), "Temple: Entretien, 118h, 54min" (récréatif). On se
+    // base uniquement là-dessus — bien plus fiable qu'un repérage visuel
+    // (note qualité, format de durée) qui varie selon le type de commerce.
+    const containers = Array.from(document.querySelectorAll('[class*="test-building"]'));
 
-    const countedContainers = new Set();
     let activeCount = 0;
     let constructionCount = 0;
     let recreationalCount = 0;
     const recreationalNames = [];
 
-    timerLeaves.forEach((el) => {
-      let node = el;
-      let container = null;
-      for (let depth = 0; depth <= 8 && node; depth += 1) {
-        const cls = typeof node.className === 'string' ? node.className : '';
-        if (cls.includes('test-building')) {
-          container = node;
-          break;
-        }
-        node = node.parentElement;
-      }
-      if (!container || countedContainers.has(container)) return;
-      countedContainers.add(container);
-
-      // L'aria-label du jeu ("Temple : Entretien, ..." / "R11 : Amélioration,
-      // ...") est plus fiable que le format de durée seul : une grosse
-      // amélioration (>24h) s'affiche aussi en "Xj Yh", donc le format ne
-      // suffit pas à distinguer un vrai bâtiment récréatif d'une simple
-      // construction longue.
+    containers.forEach((container) => {
       const labeledEl = container.querySelector('[aria-label]');
       const actionLabel = labeledEl ? labeledEl.getAttribute('aria-label') || '' : '';
       if (/entretien/i.test(actionLabel)) {
@@ -1696,28 +1835,16 @@
         // Le nom du bâtiment est donné avant le ":" ("Temple: Entretien, ...").
         const nameMatch = actionLabel.match(/^([^:]+):/);
         recreationalNames.push(nameMatch ? nameMatch[1].trim() : `Bâtiment récréatif #${recreationalCount}`);
-        return;
-      }
-      if (/am[ée]lioration/i.test(actionLabel)) {
+      } else if (/am[ée]lioration/i.test(actionLabel)) {
         constructionCount += 1;
-        return;
-      }
-
-      // Repli si aucun aria-label reconnu : on retombe sur l'ancienne
-      // heuristique par format, en traitant un format "jours" isolé comme
-      // une construction plutôt qu'un récréatif (plus fréquent, évite de
-      // sur-compter les récréatifs par erreur).
-      const leafText = el.textContent.trim();
-      if (dayFormatRegex.test(leafText)) {
-        constructionCount += 1;
-      } else if (shortCycleRegex.test(leafText) && qualityRegex.test(container.textContent)) {
+      } else if (/ouvert/i.test(actionLabel)) {
         activeCount += 1;
-      } else if (shortCycleRegex.test(leafText)) {
-        constructionCount += 1;
       }
+      // Sinon (aria-label absent ou non reconnu) : bâtiment ignoré plutôt
+      // que deviné — mieux vaut un léger sous-comptage qu'une erreur.
     });
 
-    if (countedContainers.size === 0) return null; // pas sur la carte, ou rien détecté
+    if (containers.length === 0) return null; // pas sur la carte, ou rien détecté
 
     const storedLevels = loadRecreationalLevels();
     let recreationalXpPerHour = 0;
@@ -1794,6 +1921,9 @@
   }
 
   function renderXpPanel(levelInfo, rateInfo) {
+    lastKnownLevel = levelInfo.level;
+    applyDynamicFavicon(lastKnownLevel);
+
     const panel = document.getElementById('kc-xp-panel');
     if (!panel) return;
 
@@ -2155,6 +2285,24 @@
 
   // --- Options ---
 
+  // Liste des couleurs personnalisables du chat — un tableau plutôt que du
+  // HTML répété à la main, plus simple à faire évoluer.
+  const CHAT_COLOR_FIELDS = [
+    { id: 'own-bg', settingKey: 'chatOwnBubbleColor', label: 'Fond — tes messages' },
+    { id: 'own-text', settingKey: 'chatOwnTextColor', label: 'Texte — tes messages' },
+    { id: 'other-bg', settingKey: 'chatOtherBubbleColor', label: 'Fond — messages des autres' },
+    { id: 'other-text', settingKey: 'chatOtherBubbleTextColor', label: 'Texte — messages des autres' },
+    { id: 'conv-bg', settingKey: 'chatConversationBgColor', label: 'Fond de la conversation' },
+    { id: 'sender-name', settingKey: 'chatSenderNameColor', label: "Pseudo de l'expéditeur (salons publics)" },
+    { id: 'timestamp', settingKey: 'chatTimestampColor', label: 'Horodatage' },
+    { id: 'section-header', settingKey: 'chatSectionHeaderColor', label: 'En-têtes de section (Salons/Contacts)' },
+    { id: 'input-bg', settingKey: 'chatInputBgColor', label: 'Fond — zone de saisie' },
+    { id: 'input-text', settingKey: 'chatInputTextColor', label: 'Texte — zone de saisie' },
+    { id: 'hover-bg', settingKey: 'chatHoverBgColor', label: 'Fond au survol (salons/contacts)' },
+    { id: 'page-bg', settingKey: 'pageBgColor', label: 'Fond de la page (tout le jeu)' },
+    { id: 'scrollbar', settingKey: 'chatScrollbarColor', label: 'Barre de défilement (tout le jeu)' },
+  ];
+
   function createOptionsPanel() {
     const panel = document.createElement('div');
     panel.id = 'kc-options-panel';
@@ -2195,6 +2343,43 @@
           plutôt qu'un reskin précis — un effet "filtre" plus qu'un vrai
           thème sur-mesure.
         </p>
+        <label class="kc-options-row">
+          <input type="checkbox" id="kc-options-favicon" ${settings.faviconEnabled ? 'checked' : ''} />
+          <span>Favicon dynamique (niveau)</span>
+        </label>
+        <p class="kc-options-hint">
+          Affiche ton niveau actuel directement dans l'icône de l'onglet.
+          Purement cosmétique.
+        </p>
+        <label class="kc-options-row">
+          <input type="checkbox" id="kc-options-chat-colors" ${settings.chatColorsEnabled ? 'checked' : ''} />
+          <span>Personnaliser les couleurs du chat</span>
+        </label>
+        <div class="kc-options-chat-colors-grid">
+          ${CHAT_COLOR_FIELDS.map(
+            (f) => `
+              <label class="kc-options-color-row">
+                <span>${f.label}</span>
+                <input
+                  type="color"
+                  id="kc-options-chat-${f.id}"
+                  data-setting-key="${f.settingKey}"
+                  value="${settings[f.settingKey]}"
+                  ${settings.chatColorsEnabled ? '' : 'disabled'}
+                />
+              </label>
+            `
+          ).join('')}
+        </div>
+        <button id="kc-options-chat-reset" type="button" class="kc-options-reset-btn" ${settings.chatColorsEnabled ? '' : 'disabled'}>
+          Réinitialiser les couleurs
+        </button>
+        <p class="kc-options-hint">
+          S'applique uniquement sur la page Chat. Repose sur une classe
+          interne du jeu qui peut changer à une future mise à jour — sans
+          gravité si ça arrive, la personnalisation cesse juste de
+          s'appliquer.
+        </p>
       </div>
       <div id="kc-options-footer">
         <button id="kc-options-close" type="button">Fermer</button>
@@ -2219,6 +2404,38 @@
       hueValueLabel.textContent = `${e.target.value}°`;
       saveSettings({ colorFilterHue: parseInt(e.target.value, 10) });
       applyColorFilter();
+    });
+
+    panel.querySelector('#kc-options-favicon').addEventListener('change', (e) => {
+      saveSettings({ faviconEnabled: e.target.checked });
+      applyDynamicFavicon(lastKnownLevel);
+    });
+
+    const chatColorInputs = panel.querySelectorAll('.kc-options-chat-colors-grid input[data-setting-key]');
+    const chatResetBtn = panel.querySelector('#kc-options-chat-reset');
+
+    panel.querySelector('#kc-options-chat-colors').addEventListener('change', (e) => {
+      saveSettings({ chatColorsEnabled: e.target.checked });
+      chatColorInputs.forEach((input) => (input.disabled = !e.target.checked));
+      chatResetBtn.disabled = !e.target.checked;
+      applyChatColors();
+    });
+    chatColorInputs.forEach((input) => {
+      input.addEventListener('input', (e) => {
+        saveSettings({ [e.target.dataset.settingKey]: e.target.value });
+        applyChatColors();
+      });
+    });
+    chatResetBtn.addEventListener('click', () => {
+      const defaults = {};
+      CHAT_COLOR_FIELDS.forEach((f) => {
+        defaults[f.settingKey] = DEFAULT_SETTINGS[f.settingKey];
+      });
+      saveSettings(defaults);
+      chatColorInputs.forEach((input) => {
+        input.value = defaults[input.dataset.settingKey];
+      });
+      applyChatColors();
     });
 
     panel.querySelector('#kc-options-close').addEventListener('click', () => closeAllPanels());
@@ -2595,6 +2812,7 @@
   createEventsPanel();
   createOptionsPanel();
   applyColorFilter();
+  applyChatColors();
   createRealmStatsPanel();
   createSeasonsPanel();
   createPricesPanel();
