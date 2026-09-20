@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Karmine Tool (bêta)
 // @namespace    https://github.com/Dwakoz
-// @version      1.16.0
+// @version      1.17.0
 // @description  Extension communautaire pour Sim Companies, développée par le joueur Karmine Corp. Calculateur XP, modérateurs FR et plus à venir.
 // @author       Karmine Corp
 // @match        https://www.simcompanies.com/*
@@ -100,6 +100,20 @@
     chatInputTextColor: '#FFFFFF',
     resourceTickerScrollbarColor: '#3C8CB6',
     pageBgColor: '#333333',
+    // Opacité (0-100) de chaque couleur ci-dessus — 100 = opaque, comme avant.
+    chatOwnBubbleColorAlpha: 100,
+    chatOwnTextColorAlpha: 100,
+    chatConversationBgColorAlpha: 100,
+    chatOtherBubbleColorAlpha: 100,
+    chatOtherBubbleTextColorAlpha: 100,
+    chatSenderNameColorAlpha: 100,
+    chatTimestampColorAlpha: 100,
+    chatSectionHeaderColorAlpha: 100,
+    chatScrollbarColorAlpha: 100,
+    chatInputBgColorAlpha: 100,
+    chatInputTextColorAlpha: 100,
+    resourceTickerScrollbarColorAlpha: 100,
+    pageBgColorAlpha: 100,
   };
 
   function loadSettings() {
@@ -208,6 +222,15 @@
   // la personnalisation cesse juste de s'appliquer, rien ne casse pour
   // autant (contrairement à une refonte de mise en page).
 
+  function hexToRgba(hex, alphaPercent) {
+    const clean = (hex || '#000000').replace('#', '');
+    const r = parseInt(clean.substring(0, 2), 16) || 0;
+    const g = parseInt(clean.substring(2, 4), 16) || 0;
+    const b = parseInt(clean.substring(4, 6), 16) || 0;
+    const a = Math.max(0, Math.min(100, alphaPercent == null ? 100 : alphaPercent)) / 100;
+    return `rgba(${r}, ${g}, ${b}, ${a})`;
+  }
+
   function applyChatColors() {
     const settings = loadSettings();
     let styleEl = document.getElementById('kc-chat-colors-style');
@@ -216,20 +239,27 @@
       styleEl.id = 'kc-chat-colors-style';
       document.head.appendChild(styleEl);
     }
+    // Chaque couleur est convertie en rgba() avec son opacité propre
+    // (0-100, stockée dans un réglage "<clé>Alpha" séparé — les <input
+    // type="color"> natifs ne gèrent pas la transparence).
+    const c = {};
+    CHAT_COLOR_FIELDS.forEach((f) => {
+      c[f.settingKey] = hexToRgba(settings[f.settingKey], settings[`${f.settingKey}Alpha`]);
+    });
     styleEl.textContent = settings.chatColorsEnabled
       ? `
-        .css-4hxmqy { background: ${settings.chatOwnBubbleColor} !important; color: ${settings.chatOwnTextColor} !important; }
-        .css-1h4m491 { background: ${settings.chatOtherBubbleColor} !important; color: ${settings.chatOtherBubbleTextColor} !important; }
-        .css-15aq8s1 { background: ${settings.chatConversationBgColor} !important; }
-        .css-50zrmy { color: ${settings.chatSenderNameColor} !important; }
-        .css-12lfnwr { color: ${settings.chatTimestampColor} !important; }
-        .well-header { color: ${settings.chatSectionHeaderColor} !important; }
-        textarea[placeholder*="crire ici"] { background: ${settings.chatInputBgColor} !important; color: ${settings.chatInputTextColor} !important; }
-        .css-1k853ki { background: ${settings.resourceTickerScrollbarColor} !important; }
-        body { background: ${settings.pageBgColor} !important; }
+        .css-4hxmqy { background: ${c.chatOwnBubbleColor} !important; color: ${c.chatOwnTextColor} !important; }
+        .css-1h4m491 { background: ${c.chatOtherBubbleColor} !important; color: ${c.chatOtherBubbleTextColor} !important; }
+        .css-15aq8s1 { background: ${c.chatConversationBgColor} !important; }
+        .css-50zrmy { color: ${c.chatSenderNameColor} !important; }
+        .css-12lfnwr { color: ${c.chatTimestampColor} !important; }
+        .well-header { color: ${c.chatSectionHeaderColor} !important; }
+        textarea[placeholder*="crire ici"] { background: ${c.chatInputBgColor} !important; color: ${c.chatInputTextColor} !important; }
+        .css-1k853ki { background: ${c.resourceTickerScrollbarColor} !important; }
+        body { background: ${c.pageBgColor} !important; }
         #root ::-webkit-scrollbar { width: 10px; height: 10px; }
         #root ::-webkit-scrollbar-track { background: transparent; }
-        #root ::-webkit-scrollbar-thumb { background: ${settings.chatScrollbarColor} !important; border-radius: 6px; }
+        #root ::-webkit-scrollbar-thumb { background: ${c.chatScrollbarColor} !important; border-radius: 6px; }
       `
       : '';
   }
@@ -1014,6 +1044,21 @@
       cursor: pointer;
     }
     .kc-options-color-row input[type='color']:disabled {
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
+    .kc-options-color-controls {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .kc-options-alpha-slider {
+      width: 50px;
+      accent-color: #E8A33D;
+      cursor: pointer;
+    }
+    .kc-options-alpha-slider:disabled {
       cursor: not-allowed;
       opacity: 0.5;
     }
@@ -2438,13 +2483,26 @@
             (f) => `
               <label class="kc-options-color-row">
                 <span>${f.label}</span>
-                <input
-                  type="color"
-                  id="kc-options-chat-${f.id}"
-                  data-setting-key="${f.settingKey}"
-                  value="${settings[f.settingKey]}"
-                  ${settings.chatColorsEnabled ? '' : 'disabled'}
-                />
+                <span class="kc-options-color-controls">
+                  <input
+                    type="color"
+                    id="kc-options-chat-${f.id}"
+                    data-setting-key="${f.settingKey}"
+                    value="${settings[f.settingKey]}"
+                    ${settings.chatColorsEnabled ? '' : 'disabled'}
+                  />
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="1"
+                    class="kc-options-alpha-slider"
+                    data-alpha-key="${f.settingKey}Alpha"
+                    value="${settings[`${f.settingKey}Alpha`]}"
+                    title="Opacité"
+                    ${settings.chatColorsEnabled ? '' : 'disabled'}
+                  />
+                </span>
               </label>
             `
           ).join('')}
@@ -2515,11 +2573,13 @@
     });
 
     const chatColorInputs = panel.querySelectorAll('.kc-options-chat-colors-grid input[data-setting-key]');
+    const chatAlphaInputs = panel.querySelectorAll('.kc-options-chat-colors-grid input[data-alpha-key]');
     const chatResetBtn = panel.querySelector('#kc-options-chat-reset');
 
     panel.querySelector('#kc-options-chat-colors').addEventListener('change', (e) => {
       saveSettings({ chatColorsEnabled: e.target.checked });
       chatColorInputs.forEach((input) => (input.disabled = !e.target.checked));
+      chatAlphaInputs.forEach((input) => (input.disabled = !e.target.checked));
       chatResetBtn.disabled = !e.target.checked;
       applyChatColors();
     });
@@ -2529,14 +2589,24 @@
         applyChatColors();
       });
     });
+    chatAlphaInputs.forEach((input) => {
+      input.addEventListener('input', (e) => {
+        saveSettings({ [e.target.dataset.alphaKey]: parseInt(e.target.value, 10) });
+        applyChatColors();
+      });
+    });
     chatResetBtn.addEventListener('click', () => {
       const defaults = {};
       CHAT_COLOR_FIELDS.forEach((f) => {
         defaults[f.settingKey] = DEFAULT_SETTINGS[f.settingKey];
+        defaults[`${f.settingKey}Alpha`] = DEFAULT_SETTINGS[`${f.settingKey}Alpha`];
       });
       saveSettings(defaults);
       chatColorInputs.forEach((input) => {
         input.value = defaults[input.dataset.settingKey];
+      });
+      chatAlphaInputs.forEach((input) => {
+        input.value = defaults[input.dataset.alphaKey];
       });
       applyChatColors();
     });
