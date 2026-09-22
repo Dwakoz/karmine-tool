@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Karmine Tool (bêta)
 // @namespace    https://github.com/Dwakoz
-// @version      1.19.0
+// @version      1.19.1
 // @description  Extension communautaire pour Sim Companies, développée par le joueur Karmine Corp. Calculateur XP, modérateurs FR et plus à venir.
 // @author       Karmine Corp
 // @match        https://www.simcompanies.com/*
@@ -186,6 +186,7 @@
 
   let originalFaviconHref = null;
   let lastKnownLevel = null;
+  let lastAppliedFaviconKey = null; // combine niveau + état d'activation : évite de redessiner le canvas si rien n'a changé depuis le dernier passage (appelé toutes les 5 min)
 
   function setFaviconHref(href) {
     document.querySelectorAll('link[rel~="icon"]').forEach((el) => el.remove());
@@ -201,6 +202,10 @@
       const existing = document.querySelector('link[rel~="icon"]');
       originalFaviconHref = (existing && existing.href) || '/favicon.ico';
     }
+
+    const key = `${settings.faviconEnabled}:${level}`;
+    if (key === lastAppliedFaviconKey) return; // ni le niveau ni l'activation n'ont changé, rien à refaire
+    lastAppliedFaviconKey = key;
 
     if (!settings.faviconEnabled || level == null) {
       setFaviconHref(originalFaviconHref);
@@ -1625,6 +1630,21 @@
       .replace(/'/g, '&#39;');
   }
 
+  // Un curseur (teinte, opacité) déclenche des dizaines d'événements
+  // "input" par seconde pendant qu'on le fait glisser. saveSettings()
+  // relit/réécrit tout le blob localStorage à chaque appel — pas la peine
+  // de le faire à cette fréquence. L'aperçu visuel (applyChatColors,
+  // applyColorFilter) reste instantané à chaque événement ; seule la
+  // sauvegarde est différée jusqu'à l'arrêt du glissement.
+  function debounce(fn, delayMs) {
+    let timeoutId = null;
+    return (...args) => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => fn(...args), delayMs);
+    };
+  }
+  const debouncedSaveSettings = debounce(saveSettings, 300);
+
   function injectStyle() {
     const styleEl = document.createElement('style');
     styleEl.id = 'kc-toolkit-style';
@@ -1829,64 +1849,82 @@
     return best;
   }
 
+  const contractVwapFetchesInFlight = new Set(); // évite de relancer un fetch déjà en cours pour la même ressource
+
   function applyContractVwapBadges(byName) {
     const realmId = currentRealmId == null ? 0 : currentRealmId;
     const rows = document.querySelectorAll(CONTRACT_ROW_SELECTOR);
+
+    // Regroupées par ressource : on ne vérifie/rafraîchit la fraîcheur du
+    // cache qu'une fois par ressource, pas une fois par ligne.
+    const rowsByCacheKey = new Map();
     rows.forEach((row) => {
-      if (row.dataset.kcVwapBadge) return;
       const parsed = parseContractAria(row);
       if (!parsed) return;
       const resourceId = byName[parsed.resourceName.toLowerCase()];
       if (resourceId == null) return; // nom non reconnu dans le cache, on ignore plutôt que de deviner
-
       const cacheKey = `${realmId}:${resourceId}`;
-      const useVwapMap = (vwapMap) => {
-        row.dataset.kcVwapBadge = '1';
-        const vwap = vwapMap[parsed.quality];
-        if (vwap == null || vwap <= 0) return;
-        const diffPct = ((parsed.unitPrice - vwap) / vwap) * 100;
-        if (Math.abs(diffPct) < VWAP_BADGE_THRESHOLD_PCT) return;
-        const badge = document.createElement('a');
-        badge.href = `https://simcotools.com/fr/market/${realmId}/${resourceId}`;
-        badge.target = '_blank';
-        badge.rel = 'noopener noreferrer';
-        badge.className = `kc-vwap-badge ${diffPct < 0 ? 'kc-vwap-cheap' : 'kc-vwap-expensive'}`;
-        badge.textContent = `${diffPct < 0 ? '🟢' : '🔴'} ${diffPct > 0 ? '+' : ''}${diffPct.toFixed(0)}%`;
-        badge.title = `VWAP (7 jours, qualité ${parsed.quality}) : $${vwap.toFixed(3)} — voir sur SimcoTools`;
-        const anchor = findUnitPriceElement(row, parsed.unitPrice);
-        if (anchor) {
-          // Positionnement absolu calculé depuis la position réelle du prix
-          // à l'écran : la ligne semble utiliser une mise en page grille/
-          // flex qui replace tout enfant inséré à la fin, peu importe où on
-          // l'insère dans le DOM. On contourne ça en superposant le badge
-          // directement aux bonnes coordonnées plutôt que de compter sur
-          // l'ordre normal du flux.
-          const rowPosition = getComputedStyle(row).position;
-          if (rowPosition === 'static') row.style.position = 'relative';
-          badge.style.position = 'absolute';
-          const anchorRect = anchor.getBoundingClientRect();
-          const rowRect = row.getBoundingClientRect();
-          badge.style.left = `${Math.round(anchorRect.right - rowRect.left + 6)}px`;
-          badge.style.top = `${Math.round(anchorRect.top - rowRect.top + (anchorRect.height - 16) / 2)}px`;
-          row.appendChild(badge);
-        } else {
-          row.appendChild(badge); // repli si le prix n'est pas retrouvé dans le DOM
-        }
+      if (!rowsByCacheKey.has(cacheKey)) rowsByCacheKey.set(cacheKey, { resourceId, group: [] });
+      rowsByCacheKey.get(cacheKey).group.push({ row, parsed });
+    });
+
+    rowsByCacheKey.forEach(({ resourceId, group }, cacheKey) => {
+      const applyToGroup = (vwapMap, fetchedAt) => {
+        group.forEach(({ row, parsed }) => {
+          // Déjà rendue avec ces mêmes données : on ne recrée pas le badge
+          // à chaque tick de 2s, seulement quand le VWAP a vraiment changé.
+          if (row.dataset.kcVwapFetchedAt === String(fetchedAt)) return;
+          row.dataset.kcVwapFetchedAt = String(fetchedAt);
+          const existingBadge = row.querySelector('.kc-vwap-badge');
+          if (existingBadge) existingBadge.remove();
+
+          const vwap = vwapMap[parsed.quality];
+          if (vwap == null || vwap <= 0) return;
+          const diffPct = ((parsed.unitPrice - vwap) / vwap) * 100;
+          if (Math.abs(diffPct) < VWAP_BADGE_THRESHOLD_PCT) return;
+          const badge = document.createElement('a');
+          badge.href = `https://simcotools.com/fr/market/${realmId}/${resourceId}`;
+          badge.target = '_blank';
+          badge.rel = 'noopener noreferrer';
+          badge.className = `kc-vwap-badge ${diffPct < 0 ? 'kc-vwap-cheap' : 'kc-vwap-expensive'}`;
+          badge.textContent = `${diffPct < 0 ? '🟢' : '🔴'} ${diffPct > 0 ? '+' : ''}${diffPct.toFixed(0)}%`;
+          badge.title = `VWAP (7 jours, qualité ${parsed.quality}) : $${vwap.toFixed(3)} — voir sur SimcoTools`;
+          const anchor = findUnitPriceElement(row, parsed.unitPrice);
+          if (anchor) {
+            // Positionnement absolu calculé depuis la position réelle du prix
+            // à l'écran : la ligne semble utiliser une mise en page grille/
+            // flex qui replace tout enfant inséré à la fin, peu importe où on
+            // l'insère dans le DOM. On contourne ça en superposant le badge
+            // directement aux bonnes coordonnées plutôt que de compter sur
+            // l'ordre normal du flux.
+            const rowPosition = getComputedStyle(row).position;
+            if (rowPosition === 'static') row.style.position = 'relative';
+            badge.style.position = 'absolute';
+            const anchorRect = anchor.getBoundingClientRect();
+            const rowRect = row.getBoundingClientRect();
+            badge.style.left = `${Math.round(anchorRect.right - rowRect.left + 6)}px`;
+            badge.style.top = `${Math.round(anchorRect.top - rowRect.top + (anchorRect.height - 16) / 2)}px`;
+            row.appendChild(badge);
+          } else {
+            row.appendChild(badge); // repli si le prix n'est pas retrouvé dans le DOM
+          }
+        });
       };
 
       const cached = contractVwapCache[cacheKey];
       const isFresh = cached && Date.now() - cached.fetchedAt < CONTRACT_VWAP_MAX_AGE_MS;
       if (isFresh) {
-        useVwapMap(cached.map);
-      } else {
-        row.dataset.kcVwapBadge = '1'; // évite de relancer 10 fois le même appel pendant le chargement
+        applyToGroup(cached.map, cached.fetchedAt);
+      } else if (!contractVwapFetchesInFlight.has(cacheKey)) {
+        contractVwapFetchesInFlight.add(cacheKey);
         fetchVwapMap(realmId, resourceId)
           .then((vwapMap) => {
-            contractVwapCache[cacheKey] = { map: vwapMap, fetchedAt: Date.now() };
-            row.dataset.kcVwapBadge = '';
-            useVwapMap(vwapMap);
+            const fetchedAt = Date.now();
+            contractVwapCache[cacheKey] = { map: vwapMap, fetchedAt };
+            applyToGroup(vwapMap, fetchedAt);
           })
-          .catch((err) => console.error('[Karmine Tool] Échec du VWAP pour un contrat entrant :', err));
+          .catch((err) => console.error('[Karmine Tool] Échec du VWAP pour un contrat entrant :', err))
+          .finally(() => contractVwapFetchesInFlight.delete(cacheKey));
       }
     });
   }
@@ -2594,7 +2632,7 @@
     { id: 'section-header', settingKey: 'chatSectionHeaderColor', label: 'En-têtes de section (Salons/Contacts)' },
     { id: 'input-bg', settingKey: 'chatInputBgColor', label: 'Fond — zone de saisie' },
     { id: 'input-text', settingKey: 'chatInputTextColor', label: 'Texte — zone de saisie' },
-    { id: 'hover-bg', settingKey: 'resourceTickerScrollbarColor', label: 'Barre de défilement — bandeau de ressources' },
+    { id: 'ticker-scrollbar', settingKey: 'resourceTickerScrollbarColor', label: 'Barre de défilement — bandeau de ressources' },
     { id: 'page-bg', settingKey: 'pageBgColor', label: 'Fond de la page (tout le jeu)' },
     { id: 'top-bar', settingKey: 'topBarColor', label: 'Barre du haut' },
     { id: 'bottom-bar', settingKey: 'bottomBarColor', label: 'Barre du bas (Carte/Entrepôt/...)' },
@@ -2763,7 +2801,7 @@
     });
     hueInput.addEventListener('input', (e) => {
       hueValueLabel.textContent = `${e.target.value}°`;
-      saveSettings({ colorFilterHue: parseInt(e.target.value, 10) });
+      debouncedSaveSettings({ colorFilterHue: parseInt(e.target.value, 10) });
       applyColorFilter();
     });
 
@@ -2785,13 +2823,13 @@
     });
     chatColorInputs.forEach((input) => {
       input.addEventListener('input', (e) => {
-        saveSettings({ [e.target.dataset.settingKey]: e.target.value });
+        debouncedSaveSettings({ [e.target.dataset.settingKey]: e.target.value });
         applyChatColors();
       });
     });
     chatAlphaInputs.forEach((input) => {
       input.addEventListener('input', (e) => {
-        saveSettings({ [e.target.dataset.alphaKey]: parseInt(e.target.value, 10) });
+        debouncedSaveSettings({ [e.target.dataset.alphaKey]: parseInt(e.target.value, 10) });
         applyChatColors();
       });
     });
