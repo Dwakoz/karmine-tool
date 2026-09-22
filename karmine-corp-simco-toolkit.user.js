@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Karmine Tool (bêta)
 // @namespace    https://github.com/Dwakoz
-// @version      1.18.0
+// @version      1.19.0
 // @description  Extension communautaire pour Sim Companies, développée par le joueur Karmine Corp. Calculateur XP, modérateurs FR et plus à venir.
 // @author       Karmine Corp
 // @match        https://www.simcompanies.com/*
@@ -68,6 +68,11 @@
       onSelect: () => openPanel('kc-externaltools-panel'),
     },
     {
+      id: 'customization',
+      label: 'Personnalisation',
+      onSelect: () => openPanel('kc-customization-panel'),
+    },
+    {
       id: 'options',
       label: 'Options',
       onSelect: () => openPanel('kc-options-panel'),
@@ -120,6 +125,12 @@
     bottomBarColorAlpha: 100,
     statBarTextColor: '#FFFFFF',
     statBarTextColorAlpha: 100,
+    mentionBgColor: '#333333',
+    mentionBgColorAlpha: 100,
+    activeContactBgColor: '#3C8CB6',
+    activeContactBgColorAlpha: 100,
+    mentionLinkColor: '#58A8CF',
+    mentionLinkColorAlpha: 100,
   };
 
   function loadSettings() {
@@ -266,6 +277,10 @@
         .navbar-fixed-top { background: ${c.topBarColor} !important; }
         .css-15rmbqw { background: ${c.bottomBarColor} !important; }
         .css-1tkqeqv { color: ${c.statBarTextColor} !important; }
+        .css-2iawg9 { background: ${c.mentionBgColor} !important; }
+        .css-l1ucdn { background: ${c.activeContactBgColor} !important; }
+        .css-1h4m491 a { color: ${c.mentionLinkColor} !important; }
+        .css-4hxmqy a { color: ${c.mentionLinkColor} !important; }
         #root ::-webkit-scrollbar { width: 10px; height: 10px; }
         #root ::-webkit-scrollbar-track { background: transparent; }
         #root ::-webkit-scrollbar-thumb { background: ${c.chatScrollbarColor} !important; border-radius: 6px; }
@@ -958,8 +973,6 @@
       right: 16px;
       width: 300px;
       max-width: calc(100vw - 48px);
-      max-height: 80vh;
-      overflow-y: auto;
       background: #10151F;
       color: #EDE6D8;
       border-left: 4px solid #E8A33D;
@@ -986,11 +999,71 @@
       color: #9FB0C3;
       background: #1B2436;
       border-bottom: 1px solid #3E7C74;
+    }
+    #kc-options-body {
+      padding: 16px;
+    }
+    #kc-options-footer {
+      display: flex;
+      justify-content: flex-end;
+      padding: 0 16px 16px;
+    }
+    #kc-options-close {
+      appearance: none;
+      border: 1px solid #3E7C74;
+      background: transparent;
+      color: #EDE6D8;
+      font-size: 12px;
+      padding: 6px 14px;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+    #kc-options-close:hover {
+      background: #1B2436;
+    }
+    #kc-options-close:focus-visible {
+      outline: 2px solid #E8A33D;
+      outline-offset: 2px;
+    }
+    #kc-customization-panel {
+      position: fixed;
+      top: 108px;
+      right: 16px;
+      width: 300px;
+      max-width: calc(100vw - 48px);
+      max-height: 80vh;
+      overflow-y: auto;
+      background: #10151F;
+      color: #EDE6D8;
+      border-left: 4px solid #E8A33D;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      z-index: 2147483000;
+      transform-origin: top right;
+      transform: scale(0.96);
+      opacity: 0;
+      pointer-events: none;
+      transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.18s ease;
+    }
+    #kc-customization-panel.kc-open {
+      transform: scale(1);
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #kc-customization-status {
+      display: block;
+      padding: 8px 16px;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 11px;
+      letter-spacing: 0.02em;
+      color: #9FB0C3;
+      background: #1B2436;
+      border-bottom: 1px solid #3E7C74;
       position: sticky;
       top: 0;
       z-index: 1;
     }
-    #kc-options-body {
+    #kc-customization-body {
       padding: 16px;
     }
     .kc-options-row {
@@ -1023,7 +1096,7 @@
       flex: 1;
       accent-color: #E8A33D;
     }
-    #kc-options-hue-value {
+    #kc-customization-hue-value {
       font-size: 12px;
       color: #EDE6D8;
       min-width: 32px;
@@ -1089,12 +1162,15 @@
       cursor: not-allowed;
       opacity: 0.5;
     }
-    #kc-options-footer {
+    #kc-customization-footer {
       display: flex;
       justify-content: flex-end;
       padding: 0 16px 16px;
+      position: sticky;
+      bottom: 0;
+      background: #10151F;
     }
-    #kc-options-close {
+    #kc-customization-close {
       appearance: none;
       border: 1px solid #3E7C74;
       background: transparent;
@@ -1104,10 +1180,10 @@
       cursor: pointer;
       transition: background 0.15s ease;
     }
-    #kc-options-close:hover {
+    #kc-customization-close:hover {
       background: #1B2436;
     }
-    #kc-options-close:focus-visible {
+    #kc-customization-close:focus-visible {
       outline: 2px solid #E8A33D;
       outline-offset: 2px;
     }
@@ -1527,7 +1603,7 @@
       outline-offset: 2px;
     }
     @media (prefers-reduced-motion: reduce) {
-      #kc-toast, #kc-menu-panel, #kc-xp-panel, #kc-moderators-panel, #kc-events-panel, #kc-options-panel, #kc-realmstats-panel, #kc-seasons-panel, #kc-prices-panel, #kc-externaltools-panel {
+      #kc-toast, #kc-menu-panel, #kc-xp-panel, #kc-moderators-panel, #kc-events-panel, #kc-options-panel, #kc-customization-panel, #kc-realmstats-panel, #kc-seasons-panel, #kc-prices-panel, #kc-externaltools-panel {
         transition: opacity 0.3s ease;
         transform: none;
       }
@@ -2523,6 +2599,9 @@
     { id: 'top-bar', settingKey: 'topBarColor', label: 'Barre du haut' },
     { id: 'bottom-bar', settingKey: 'bottomBarColor', label: 'Barre du bas (Carte/Entrepôt/...)' },
     { id: 'stat-bar-text', settingKey: 'statBarTextColor', label: 'Texte des barres (argent/XP/simboost)' },
+    { id: 'mention-bg', settingKey: 'mentionBgColor', label: 'Fond — message où tu es cité' },
+    { id: 'active-contact-bg', settingKey: 'activeContactBgColor', label: 'Fond — salon/contact ouvert' },
+    { id: 'mention-link', settingKey: 'mentionLinkColor', label: 'Liens/mentions (tes messages et ceux des autres)' },
     { id: 'scrollbar', settingKey: 'chatScrollbarColor', label: 'Barre de défilement (tout le jeu)' },
   ];
 
@@ -2531,7 +2610,6 @@
     panel.id = 'kc-options-panel';
     panel.setAttribute('role', 'status');
     const settings = loadSettings();
-    const hasCustomBg = !!loadCustomBackground();
     panel.innerHTML = `
       <span id="kc-options-status">Karmine Tool — Options</span>
       <div id="kc-options-body">
@@ -2545,21 +2623,47 @@
           détails restent masqués — utile si tu joues un autre type de
           business.
         </p>
+      </div>
+      <div id="kc-options-footer">
+        <button id="kc-options-close" type="button">Fermer</button>
+      </div>
+    `;
+    document.body.appendChild(panel);
+
+    panel.querySelector('#kc-options-restaurants').addEventListener('change', (e) => {
+      saveSettings({ hasRestaurants: e.target.checked });
+      renderEventsPanel(lastFetchedEvents, lastResourceNames); // ré-affiche instantanément sans nouvel appel réseau
+    });
+
+    panel.querySelector('#kc-options-close').addEventListener('click', () => closeAllPanels());
+  }
+
+  // --- Personnalisation (filtre couleur, favicon, couleurs du chat, fond d'écran) ---
+
+  function createCustomizationPanel() {
+    const panel = document.createElement('div');
+    panel.id = 'kc-customization-panel';
+    panel.setAttribute('role', 'status');
+    const settings = loadSettings();
+    const hasCustomBg = !!loadCustomBackground();
+    panel.innerHTML = `
+      <span id="kc-customization-status">Karmine Tool — Personnalisation</span>
+      <div id="kc-customization-body">
         <label class="kc-options-row">
-          <input type="checkbox" id="kc-options-color-filter" ${settings.colorFilterEnabled ? 'checked' : ''} />
+          <input type="checkbox" id="kc-customization-color-filter" ${settings.colorFilterEnabled ? 'checked' : ''} />
           <span>Filtre de couleur sur le jeu</span>
         </label>
         <div class="kc-options-hue-row">
           <input
             type="range"
-            id="kc-options-hue"
+            id="kc-customization-hue"
             min="0"
             max="360"
             step="1"
             value="${settings.colorFilterHue}"
             ${settings.colorFilterEnabled ? '' : 'disabled'}
           />
-          <span id="kc-options-hue-value">${settings.colorFilterHue}°</span>
+          <span id="kc-customization-hue-value">${settings.colorFilterHue}°</span>
         </div>
         <p class="kc-options-hint">
           Teinte globale appliquée sur le jeu (pas sur cet outil). Le jeu
@@ -2568,7 +2672,7 @@
           thème sur-mesure.
         </p>
         <label class="kc-options-row">
-          <input type="checkbox" id="kc-options-favicon" ${settings.faviconEnabled ? 'checked' : ''} />
+          <input type="checkbox" id="kc-customization-favicon" ${settings.faviconEnabled ? 'checked' : ''} />
           <span>Favicon dynamique (niveau)</span>
         </label>
         <p class="kc-options-hint">
@@ -2576,7 +2680,7 @@
           Purement cosmétique.
         </p>
         <label class="kc-options-row">
-          <input type="checkbox" id="kc-options-chat-colors" ${settings.chatColorsEnabled ? 'checked' : ''} />
+          <input type="checkbox" id="kc-customization-chat-colors" ${settings.chatColorsEnabled ? 'checked' : ''} />
           <span>Personnaliser les couleurs du chat</span>
         </label>
         <div class="kc-options-chat-colors-grid">
@@ -2587,7 +2691,7 @@
                 <span class="kc-options-color-controls">
                   <input
                     type="color"
-                    id="kc-options-chat-${f.id}"
+                    id="kc-customization-chat-${f.id}"
                     data-setting-key="${f.settingKey}"
                     value="${settings[f.settingKey]}"
                     ${settings.chatColorsEnabled ? '' : 'disabled'}
@@ -2608,7 +2712,7 @@
             `
           ).join('')}
         </div>
-        <button id="kc-options-chat-reset" type="button" class="kc-options-reset-btn" ${settings.chatColorsEnabled ? '' : 'disabled'}>
+        <button id="kc-customization-chat-reset" type="button" class="kc-options-reset-btn" ${settings.chatColorsEnabled ? '' : 'disabled'}>
           Réinitialiser les couleurs
         </button>
         <p class="kc-options-hint">
@@ -2620,8 +2724,8 @@
         <label class="kc-options-row" style="margin-top:14px;">
           <span>Fond d'écran personnalisé (carte)</span>
         </label>
-        <input type="file" id="kc-options-bg-file" accept="image/*" style="margin-top:8px;width:100%;font-size:11px;color:#C7D0DB;" />
-        <button id="kc-options-bg-remove" type="button" class="kc-options-reset-btn" ${hasCustomBg ? '' : 'disabled'} style="margin-top:8px;">
+        <input type="file" id="kc-customization-bg-file" accept="image/*" style="margin-top:8px;width:100%;font-size:11px;color:#C7D0DB;" />
+        <button id="kc-customization-bg-remove" type="button" class="kc-options-reset-btn" ${hasCustomBg ? '' : 'disabled'} style="margin-top:8px;">
           Retirer l'image
         </button>
         <p class="kc-options-hint">
@@ -2630,34 +2734,29 @@
           qu'une classe générée — plus stable.
         </p>
       </div>
-      <div id="kc-options-footer">
-        <button id="kc-options-close" type="button">Fermer</button>
+      <div id="kc-customization-footer">
+        <button id="kc-customization-close" type="button">Fermer</button>
       </div>
     `;
     document.body.appendChild(panel);
 
-    panel.querySelector('#kc-options-bg-file').addEventListener('change', (e) => {
+    panel.querySelector('#kc-customization-bg-file').addEventListener('change', (e) => {
       const file = e.target.files && e.target.files[0];
       handleCustomBackgroundFile(file, () => {
-        panel.querySelector('#kc-options-bg-remove').disabled = false;
+        panel.querySelector('#kc-customization-bg-remove').disabled = false;
       });
     });
-    panel.querySelector('#kc-options-bg-remove').addEventListener('click', () => {
+    panel.querySelector('#kc-customization-bg-remove').addEventListener('click', () => {
       removeCustomBackground();
       applyCustomBackground();
-      panel.querySelector('#kc-options-bg-remove').disabled = true;
-      panel.querySelector('#kc-options-bg-file').value = '';
+      panel.querySelector('#kc-customization-bg-remove').disabled = true;
+      panel.querySelector('#kc-customization-bg-file').value = '';
     });
 
-    panel.querySelector('#kc-options-restaurants').addEventListener('change', (e) => {
-      saveSettings({ hasRestaurants: e.target.checked });
-      renderEventsPanel(lastFetchedEvents, lastResourceNames); // ré-affiche instantanément sans nouvel appel réseau
-    });
+    const hueInput = panel.querySelector('#kc-customization-hue');
+    const hueValueLabel = panel.querySelector('#kc-customization-hue-value');
 
-    const hueInput = panel.querySelector('#kc-options-hue');
-    const hueValueLabel = panel.querySelector('#kc-options-hue-value');
-
-    panel.querySelector('#kc-options-color-filter').addEventListener('change', (e) => {
+    panel.querySelector('#kc-customization-color-filter').addEventListener('change', (e) => {
       saveSettings({ colorFilterEnabled: e.target.checked });
       hueInput.disabled = !e.target.checked;
       applyColorFilter();
@@ -2668,16 +2767,16 @@
       applyColorFilter();
     });
 
-    panel.querySelector('#kc-options-favicon').addEventListener('change', (e) => {
+    panel.querySelector('#kc-customization-favicon').addEventListener('change', (e) => {
       saveSettings({ faviconEnabled: e.target.checked });
       applyDynamicFavicon(lastKnownLevel);
     });
 
     const chatColorInputs = panel.querySelectorAll('.kc-options-chat-colors-grid input[data-setting-key]');
     const chatAlphaInputs = panel.querySelectorAll('.kc-options-chat-colors-grid input[data-alpha-key]');
-    const chatResetBtn = panel.querySelector('#kc-options-chat-reset');
+    const chatResetBtn = panel.querySelector('#kc-customization-chat-reset');
 
-    panel.querySelector('#kc-options-chat-colors').addEventListener('change', (e) => {
+    panel.querySelector('#kc-customization-chat-colors').addEventListener('change', (e) => {
       saveSettings({ chatColorsEnabled: e.target.checked });
       chatColorInputs.forEach((input) => (input.disabled = !e.target.checked));
       chatAlphaInputs.forEach((input) => (input.disabled = !e.target.checked));
@@ -2712,7 +2811,7 @@
       applyChatColors();
     });
 
-    panel.querySelector('#kc-options-close').addEventListener('click', () => closeAllPanels());
+    panel.querySelector('#kc-customization-close').addEventListener('click', () => closeAllPanels());
   }
 
   // --- Statistiques du royaume (API publique SimcoTools) ---
@@ -2964,7 +3063,7 @@
 
   // --- Gestion commune : ouverture exclusive des panneaux ---
 
-  const OVERLAY_PANEL_IDS = ['kc-menu-panel', 'kc-xp-panel', 'kc-moderators-panel', 'kc-events-panel', 'kc-options-panel', 'kc-realmstats-panel', 'kc-seasons-panel', 'kc-prices-panel', 'kc-externaltools-panel'];
+  const OVERLAY_PANEL_IDS = ['kc-menu-panel', 'kc-xp-panel', 'kc-moderators-panel', 'kc-events-panel', 'kc-options-panel', 'kc-customization-panel', 'kc-realmstats-panel', 'kc-seasons-panel', 'kc-prices-panel', 'kc-externaltools-panel'];
 
   function closeAllPanels() {
     OVERLAY_PANEL_IDS.forEach((id) => {
@@ -3092,6 +3191,7 @@
   createModeratorsPanel();
   createEventsPanel();
   createOptionsPanel();
+  createCustomizationPanel();
   applyColorFilter();
   applyChatColors();
   applyCustomBackground();
