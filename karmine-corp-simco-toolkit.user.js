@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Karmine Tool (bêta)
 // @namespace    https://github.com/Dwakoz
-// @version      1.17.2
+// @version      1.18.0
 // @description  Extension communautaire pour Sim Companies, développée par le joueur Karmine Corp. Calculateur XP, modérateurs FR et plus à venir.
 // @author       Karmine Corp
 // @match        https://www.simcompanies.com/*
@@ -1534,6 +1534,21 @@
     }
   `;
 
+  // Échappe tout texte externe (noms de ressources/bâtiments venant de
+  // SimcoTools) avant de l'insérer dans du innerHTML. Rien ne prouve que
+  // SimcoTools renvoie un jour du contenu piégé, mais insérer du texte
+  // tiers sans échappement est une mauvaise pratique par principe — un nom
+  // contenant "<script>" ou un attribut d'événement s'exécuterait sinon
+  // dans la page du jeu.
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
   function injectStyle() {
     const styleEl = document.createElement('style');
     styleEl.id = 'kc-toolkit-style';
@@ -1644,8 +1659,24 @@
     return parts.join(' ');
   }
 
+  const FETCH_TIMEOUT_MS = 10_000; // au-delà de 10s, on abandonne plutôt que d'attendre indéfiniment
+
+  // Enveloppe commune pour les appels au jeu lui-même (même origine) :
+  // délai maximal + vérification du statut HTTP avant de tenter de parser
+  // en JSON (une page d'erreur ne parse pas proprement en JSON).
+  function fetchJson(url) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+    return fetch(url, { credentials: 'same-origin', signal: controller.signal })
+      .then((res) => {
+        if (!res.ok) throw new Error(`Requête échouée (statut ${res.status}) : ${url}`);
+        return res.json();
+      })
+      .finally(() => clearTimeout(timeoutId));
+  }
+
   function fetchAuthData() {
-    return fetch('/api/v3/companies/auth-data/', { credentials: 'same-origin' }).then((res) => res.json());
+    return fetchJson('/api/v3/companies/auth-data/');
   }
 
   // --- Badges VWAP sur les contrats entrants ---
@@ -1660,7 +1691,8 @@
   const CONTRACT_ROW_SELECTOR = 'div[aria-label^="Contrat entrant"]';
   const CONTRACT_ARIA_REGEX = /Contrat entrant,\s*[\d\s]+\s+(.+?)\s+qualité\s*(\d+),\s*à\s*([\d.,]+)\$\s*par unité/i;
 
-  const contractVwapCache = {}; // clé "realmId:resourceId" → map qualité→vwap
+  const contractVwapCache = {}; // clé "realmId:resourceId" → { map: qualité→vwap, fetchedAt }
+  const CONTRACT_VWAP_MAX_AGE_MS = 10 * 60 * 1000; // au-delà de 10 min, on redemande un VWAP frais
   let resourceKindByNameCache = null;
   let resourceKindByNameCacheRealm = null;
 
@@ -1766,13 +1798,15 @@
         }
       };
 
-      if (contractVwapCache[cacheKey]) {
-        useVwapMap(contractVwapCache[cacheKey]);
+      const cached = contractVwapCache[cacheKey];
+      const isFresh = cached && Date.now() - cached.fetchedAt < CONTRACT_VWAP_MAX_AGE_MS;
+      if (isFresh) {
+        useVwapMap(cached.map);
       } else {
         row.dataset.kcVwapBadge = '1'; // évite de relancer 10 fois le même appel pendant le chargement
         fetchVwapMap(realmId, resourceId)
           .then((vwapMap) => {
-            contractVwapCache[cacheKey] = vwapMap;
+            contractVwapCache[cacheKey] = { map: vwapMap, fetchedAt: Date.now() };
             row.dataset.kcVwapBadge = '';
             useVwapMap(vwapMap);
           })
@@ -1790,7 +1824,7 @@
   // --- Prix du marché (API native market-ticker + noms via SimcoTools) ---
 
   function fetchMarketTicker(realmId) {
-    return fetch(`/api/v3/market-ticker/${realmId}/`, { credentials: 'same-origin' }).then((res) => res.json());
+    return fetchJson(`/api/v3/market-ticker/${realmId}/`);
   }
 
   function formatTickerPrice(price) {
@@ -1835,7 +1869,7 @@
               return `
                 <tr>
                   <td class="kc-price-resource">
-                    <a href="${url}" target="_blank" rel="noopener noreferrer">${it.name}</a>
+                    <a href="${url}" target="_blank" rel="noopener noreferrer">${escapeHtml(it.name)}</a>
                   </td>
                   <td class="kc-price-value">$${formatTickerPrice(it.price)}</td>
                   <td class="kc-price-trend ${it.isUp ? 'kc-positive' : 'kc-negative'}">${it.isUp ? '↗' : '↘'}</td>
@@ -1848,13 +1882,17 @@
     `;
   }
 
+  let pricesRefreshInFlight = false;
+
   function refreshMarketPrices() {
+    if (pricesRefreshInFlight) return Promise.resolve(); // un rafraîchissement est déjà en cours, on ignore ce nouveau clic
     const body = document.getElementById('kc-prices-body');
     if (body) body.innerHTML = '<p id="kc-prices-empty">Chargement…</p>';
     if (currentRealmId == null) {
       if (body) body.innerHTML = '<p id="kc-prices-empty">Un instant, en attente des données du jeu…</p>';
       return Promise.resolve();
     }
+    pricesRefreshInFlight = true;
     return Promise.all([fetchMarketTicker(currentRealmId), fetchResourceNames(currentRealmId)])
       .then(([ticker, resourceNames]) => {
         pricesState.items = ticker.map((it) => ({
@@ -1868,6 +1906,9 @@
       .catch((err) => {
         console.error('[Karmine Tool] Échec du chargement des prix du marché :', err);
         if (body) body.innerHTML = '<p id="kc-prices-empty">Échec du chargement. Réessaie dans un instant.</p>';
+      })
+      .finally(() => {
+        pricesRefreshInFlight = false;
       });
   }
 
@@ -1926,6 +1967,7 @@
   const RECREATIONAL_LEVELS_KEY = 'kc_recreational_levels_v1';
 
   function loadRecreationalLevels() {
+    // Clé = URL du bâtiment (id stable), pas sa position dans la liste.
     try {
       const raw = localStorage.getItem(RECREATIONAL_LEVELS_KEY);
       return raw ? JSON.parse(raw) : {};
@@ -1934,9 +1976,9 @@
     }
   }
 
-  function saveRecreationalLevel(index, level) {
+  function saveRecreationalLevel(id, level) {
     const levels = loadRecreationalLevels();
-    levels[index] = level;
+    levels[id] = level;
     try {
       localStorage.setItem(RECREATIONAL_LEVELS_KEY, JSON.stringify(levels));
     } catch (err) {
@@ -1956,7 +1998,7 @@
     let activeCount = 0;
     let constructionCount = 0;
     let recreationalCount = 0;
-    const recreationalNames = [];
+    const recreationalBuildings = []; // { id, name } — id = URL du bâtiment (/fr/b/{id}/), stable, pas la position dans la liste
 
     containers.forEach((container) => {
       const labeledEl = container.querySelector('[aria-label]');
@@ -1965,7 +2007,12 @@
         recreationalCount += 1;
         // Le nom du bâtiment est donné avant le ":" ("Temple: Entretien, ...").
         const nameMatch = actionLabel.match(/^([^:]+):/);
-        recreationalNames.push(nameMatch ? nameMatch[1].trim() : `Bâtiment récréatif #${recreationalCount}`);
+        const name = nameMatch ? nameMatch[1].trim() : `Bâtiment récréatif #${recreationalCount}`;
+        // L'URL du bâtiment (ex. "/fr/b/46896446/") sert d'identifiant stable
+        // pour mémoriser son niveau — contrairement à sa position dans la
+        // liste, qui peut changer si un bâtiment est ajouté/réordonné.
+        const id = container.getAttribute('href') || `sans-id-${recreationalCount}`;
+        recreationalBuildings.push({ id, name });
       } else if (/am[ée]lioration/i.test(actionLabel)) {
         constructionCount += 1;
       } else if (/ouvert/i.test(actionLabel)) {
@@ -1979,14 +2026,14 @@
 
     const storedLevels = loadRecreationalLevels();
     let recreationalXpPerHour = 0;
-    for (let i = 0; i < recreationalCount; i += 1) {
-      const level = storedLevels[i] || 1; // niveau 1 par défaut tant que non renseigné
+    recreationalBuildings.forEach((b) => {
+      const level = storedLevels[b.id] || 1; // niveau 1 par défaut tant que non renseigné
       recreationalXpPerHour += level * RECREATIONAL_XP_PER_HOUR_PER_LEVEL;
-    }
+    });
 
     const xpPerHour =
       activeCount * ACTIVE_BUILDING_XP_PER_HOUR + constructionCount * CONSTRUCTION_XP_PER_HOUR + recreationalXpPerHour;
-    return { activeCount, constructionCount, recreationalCount, recreationalNames, xpPerHour };
+    return { activeCount, constructionCount, recreationalCount, recreationalBuildings, xpPerHour };
   }
 
   const LAST_INSTANT_ESTIMATE_KEY = 'kc_last_instant_estimate_v1';
@@ -2012,7 +2059,11 @@
     }
   }
 
+  let xpRefreshInFlight = false;
+
   function refreshXpData() {
+    if (xpRefreshInFlight) return Promise.resolve(); // un rafraîchissement est déjà en cours, on ignore ce nouveau clic
+    xpRefreshInFlight = true;
     return fetchAuthData()
       .then((data) => {
         currentRealmId = data.authCompany.realmId; // réutilisé par le module VWAP, jamais redemandé
@@ -2026,7 +2077,7 @@
             activeCount: instant.activeCount,
             constructionCount: instant.constructionCount,
             recreationalCount: instant.recreationalCount,
-            recreationalNames: instant.recreationalNames,
+            recreationalBuildings: instant.recreationalBuildings,
           });
           return;
         }
@@ -2038,7 +2089,7 @@
             activeCount: cached.activeCount,
             constructionCount: cached.constructionCount,
             recreationalCount: cached.recreationalCount,
-            recreationalNames: cached.recreationalNames,
+            recreationalBuildings: cached.recreationalBuildings,
             at: cached.at,
           });
           return;
@@ -2048,6 +2099,9 @@
       })
       .catch((err) => {
         console.error('[Karmine Tool] Échec du rafraîchissement XP :', err);
+      })
+      .finally(() => {
+        xpRefreshInFlight = false;
       });
   }
 
@@ -2095,31 +2149,38 @@
     }
 
     // Champs éditables pour le niveau des bâtiments récréatifs — non
-    // détectable automatiquement, on le mémorise une fois saisi.
+    // détectable automatiquement, on le mémorise une fois saisi. Identifiés
+    // par l'URL du bâtiment (id stable), pas par leur position dans la
+    // liste, qui peut changer si un bâtiment est ajouté/réordonné.
     if (recreationalEl) {
       const count = rateInfo && (rateInfo.source === 'instant' || rateInfo.source === 'cached') ? rateInfo.recreationalCount : 0;
       if (count > 0) {
         const storedLevels = loadRecreationalLevels();
-        const names = (rateInfo && rateInfo.recreationalNames) || [];
+        // Repli pour un ancien format de cache (avant ce correctif) qui
+        // n'avait que des noms, pas d'id stable — reste utilisable le temps
+        // que le cache expire (3h) sans planter.
+        const buildings =
+          (rateInfo && rateInfo.recreationalBuildings) ||
+          ((rateInfo && rateInfo.recreationalNames) || []).map((name, i) => ({ id: `legacy-${i}`, name }));
         recreationalEl.innerHTML =
           '<p class="kc-xp-recreational-label">Niveau des bâtiments récréatifs :</p>' +
-          Array.from({ length: count })
-            .map((_, i) => {
-              const level = storedLevels[i] || 1;
-              const label = names[i] || `Bâtiment récréatif #${i + 1}`;
+          buildings
+            .map((b, i) => {
+              const level = storedLevels[b.id] || 1;
+              const label = b.name || `Bâtiment récréatif #${i + 1}`;
               return `
                 <label class="kc-xp-recreational-row">
-                  <span>${label}</span>
-                  <input type="number" min="1" step="1" value="${level}" data-recreational-index="${i}" />
+                  <span>${escapeHtml(label)}</span>
+                  <input type="number" min="1" step="1" value="${level}" data-recreational-id="${escapeHtml(b.id)}" />
                 </label>
               `;
             })
             .join('');
-        recreationalEl.querySelectorAll('input[data-recreational-index]').forEach((input) => {
+        recreationalEl.querySelectorAll('input[data-recreational-id]').forEach((input) => {
           input.addEventListener('change', (e) => {
-            const idx = parseInt(e.target.getAttribute('data-recreational-index'), 10);
+            const id = e.target.getAttribute('data-recreational-id');
             const level = Math.max(1, parseInt(e.target.value, 10) || 1);
-            saveRecreationalLevel(idx, level);
+            saveRecreationalLevel(id, level);
             refreshXpData();
           });
         });
@@ -2204,7 +2265,13 @@
     });
   }
 
-  const vwapState = { resourceId: null, map: null };
+  // État partagé du VWAP affiché — inclut le realm (sinon un résidu d'un
+  // autre royaume pourrait fausser l'affichage) et un horodatage (pour
+  // rafraîchir périodiquement même si on reste longtemps sur la même
+  // ressource, plutôt que de garder un VWAP figé indéfiniment).
+  const vwapState = { resourceId: null, realmId: null, map: null, fetchedAt: 0 };
+  const VWAP_MAX_AGE_MS = 10 * 60 * 1000; // au-delà de 10 min, on redemande un VWAP frais
+  let vwapFetchToken = 0; // évite qu'une réponse arrivée en retard (navigation rapide entre ressources) n'écrase des données plus récentes
 
   function applyVwapBadges() {
     if (!vwapState.map) return;
@@ -2232,10 +2299,21 @@
 
   function refreshVwapForResource(resourceId) {
     if (currentRealmId == null) return; // pas encore prêt (le calculateur XP n'a pas fini son premier appel) : on retentera
+    const token = ++vwapFetchToken;
     fetchVwapMap(currentRealmId, resourceId)
       .then((map) => {
+        if (token !== vwapFetchToken) return; // une navigation plus récente a déjà lancé une autre requête : on ignore cette réponse arrivée en retard
         vwapState.resourceId = resourceId;
+        vwapState.realmId = currentRealmId;
         vwapState.map = map;
+        vwapState.fetchedAt = Date.now();
+        // Nouvelles données : on retire les badges déjà posés pour qu'ils
+        // soient recalculés avec le VWAP à jour plutôt que de rester figés.
+        document.querySelectorAll(MARKET_ROW_SELECTOR).forEach((row) => {
+          delete row.dataset.kcVwapBadge;
+          const existingBadge = row.querySelector('.kc-vwap-badge');
+          if (existingBadge) existingBadge.remove();
+        });
         applyVwapBadges();
       })
       .catch((err) => console.error('[Karmine Tool] Échec du chargement du VWAP :', err));
@@ -2244,7 +2322,8 @@
   function checkMarketPage() {
     const resourceId = getMarketResourceIdFromUrl();
     if (resourceId == null) return;
-    if (resourceId !== vwapState.resourceId) {
+    const isStale = vwapState.fetchedAt > 0 && Date.now() - vwapState.fetchedAt > VWAP_MAX_AGE_MS;
+    if (resourceId !== vwapState.resourceId || currentRealmId !== vwapState.realmId || isStale) {
       refreshVwapForResource(resourceId);
     } else {
       applyVwapBadges(); // réapplique sur d'éventuelles nouvelles lignes (tick de prix, défilement) sans appel réseau
@@ -2264,15 +2343,20 @@
         method: 'GET',
         url,
         headers: { 'Accept-Language': 'fr' },
+        timeout: FETCH_TIMEOUT_MS,
         onload: (res) => {
+          if (res.status < 200 || res.status >= 300) {
+            reject(new Error(`Requête échouée (statut ${res.status}) : ${url}`));
+            return;
+          }
           try {
             resolve(JSON.parse(res.responseText));
           } catch (err) {
             reject(err);
           }
         },
-        onerror: reject,
-        ontimeout: reject,
+        onerror: () => reject(new Error(`Échec réseau : ${url}`)),
+        ontimeout: () => reject(new Error(`Délai dépassé : ${url}`)),
       });
     });
   }
@@ -2300,9 +2384,7 @@
   }
 
   function fetchMarketEvents(realmId) {
-    return fetch(`/api/v3/encyclopedia/events/${realmId}/`, { credentials: 'same-origin' })
-      .then((res) => res.json())
-      .then((data) => (Array.isArray(data.events) ? data.events : []));
+    return fetchJson(`/api/v3/encyclopedia/events/${realmId}/`).then((data) => (Array.isArray(data.events) ? data.events : []));
   }
 
   function formatDaysHoursOnly(totalHours) {
@@ -2327,7 +2409,7 @@
     const isIngredient = loadSettings().hasRestaurants && RESTAURANT_INGREDIENT_IDS.has(event.kind);
     return `
       <tr class="kc-event-row">
-        <td class="kc-event-resource">${resourceName}${isIngredient ? ' <span class="kc-event-tag">🍽️</span>' : ''}</td>
+        <td class="kc-event-resource">${escapeHtml(resourceName)}${isIngredient ? ' <span class="kc-event-tag">🍽️</span>' : ''}</td>
         <td class="kc-event-modifier ${modifierClass}">${modifierText}</td>
         <td class="kc-event-until">${formatDaysHoursOnly(hoursLeft)}</td>
         <td class="kc-event-since">${formatShortDate(event.since)}</td>
@@ -2368,7 +2450,10 @@
     `;
   }
 
+  let eventsRefreshInFlight = false;
+
   function refreshMarketEvents() {
+    if (eventsRefreshInFlight) return Promise.resolve(); // un rafraîchissement est déjà en cours, on ignore ce nouveau clic
     const panel = document.getElementById('kc-events-panel');
     if (panel) {
       panel.querySelector('#kc-events-body').innerHTML = '<p id="kc-events-empty">Chargement…</p>';
@@ -2380,6 +2465,7 @@
       }
       return Promise.resolve();
     }
+    eventsRefreshInFlight = true;
     return Promise.all([fetchMarketEvents(currentRealmId), fetchResourceNames(currentRealmId)])
       .then(([events, resourceNames]) => {
         lastFetchedEvents = events;
@@ -2392,6 +2478,9 @@
           panel.querySelector('#kc-events-body').innerHTML =
             '<p id="kc-events-empty">Échec du chargement. Réessaie dans un instant.</p>';
         }
+      })
+      .finally(() => {
+        eventsRefreshInFlight = false;
       });
   }
 
@@ -2562,7 +2651,7 @@
 
     panel.querySelector('#kc-options-restaurants').addEventListener('change', (e) => {
       saveSettings({ hasRestaurants: e.target.checked });
-      renderEventsPanel(lastFetchedEvents); // ré-affiche instantanément sans nouvel appel réseau
+      renderEventsPanel(lastFetchedEvents, lastResourceNames); // ré-affiche instantanément sans nouvel appel réseau
     });
 
     const hueInput = panel.querySelector('#kc-options-hue');
@@ -2682,7 +2771,7 @@
         return `
           <div class="kc-realmstats-row">
             <div class="kc-realmstats-row-top">
-              <span class="kc-realmstats-row-name">${b.name}</span>
+              <span class="kc-realmstats-row-name">${escapeHtml(b.name)}</span>
               <span class="kc-realmstats-row-value">${proportionPct}% (${b.count.toLocaleString('fr-FR')})</span>
             </div>
             <div class="kc-realmstats-bar-track">
@@ -2712,13 +2801,17 @@
     }
   }
 
+  let realmStatsRefreshInFlight = false;
+
   function refreshRealmStats() {
+    if (realmStatsRefreshInFlight) return; // un rafraîchissement est déjà en cours, on ignore ce nouveau clic
     const list = document.getElementById('kc-realmstats-list');
     if (list) list.innerHTML = '<p id="kc-realmstats-empty">Chargement…</p>';
     if (currentRealmId == null) {
       if (list) list.innerHTML = '<p id="kc-realmstats-empty">Un instant, en attente des données du jeu…</p>';
       return;
     }
+    realmStatsRefreshInFlight = true;
     Promise.all([fetchRealmBuildingStats(currentRealmId), fetchRealmPhase(currentRealmId)])
       .then(([buildingStats, phase]) => {
         realmStatsState.buildings = buildingStats.buildings || [];
@@ -2730,6 +2823,9 @@
       .catch((err) => {
         console.error('[Karmine Tool] Échec du chargement des statistiques du royaume :', err);
         if (list) list.innerHTML = '<p id="kc-realmstats-empty">Échec du chargement. Réessaie dans un instant.</p>';
+      })
+      .finally(() => {
+        realmStatsRefreshInFlight = false;
       });
   }
 
