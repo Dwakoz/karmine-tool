@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Karmine Tool (bêta)
 // @namespace    https://github.com/Dwakoz
-// @version      1.19.1
+// @version      1.22.0
 // @description  Extension communautaire pour Sim Companies, développée par le joueur Karmine Corp. Calculateur XP, modérateurs FR et plus à venir.
 // @author       Karmine Corp
 // @match        https://www.simcompanies.com/*
@@ -26,58 +26,62 @@
   let currentRealmId = null;
 
   // Liste des modules du menu. On y ajoutera une entrée à chaque nouvel
-  // outil développé.
-  const MENU_ITEMS = [
-    {
-      id: 'moderators',
-      label: 'Modérateurs',
-      onSelect: () => openPanel('kc-moderators-panel'),
-    },
-    {
-      id: 'market-events',
-      label: 'Événements',
-      onSelect: () => {
-        openPanel('kc-events-panel');
-        refreshMarketEvents();
+  // outil développé. Fonction (pas une constante) car les libellés
+  // dépendent de la langue choisie — réévalués à chaque reconstruction du
+  // menu (au démarrage, et après un changement de langue).
+  function getMenuItems() {
+    return [
+      {
+        id: 'moderators',
+        label: t('menu.moderators'),
+        onSelect: () => openPanel('kc-moderators-panel'),
       },
-    },
-    {
-      id: 'realm-stats',
-      label: 'Statistiques du royaume',
-      onSelect: () => {
-        openPanel('kc-realmstats-panel');
-        refreshRealmStats();
+      {
+        id: 'market-events',
+        label: t('menu.events'),
+        onSelect: () => {
+          openPanel('kc-events-panel');
+          refreshMarketEvents();
+        },
       },
-    },
-    {
-      id: 'seasons',
-      label: 'Saisons',
-      onSelect: () => openPanel('kc-seasons-panel'),
-    },
-    {
-      id: 'market-prices',
-      label: 'Prix du marché',
-      onSelect: () => {
-        openPanel('kc-prices-panel');
-        refreshMarketPrices();
+      {
+        id: 'realm-stats',
+        label: t('menu.realmStats'),
+        onSelect: () => {
+          openPanel('kc-realmstats-panel');
+          refreshRealmStats();
+        },
       },
-    },
-    {
-      id: 'external-tools',
-      label: 'Outils externes',
-      onSelect: () => openPanel('kc-externaltools-panel'),
-    },
-    {
-      id: 'customization',
-      label: 'Personnalisation',
-      onSelect: () => openPanel('kc-customization-panel'),
-    },
-    {
-      id: 'options',
-      label: 'Options',
-      onSelect: () => openPanel('kc-options-panel'),
-    },
-  ];
+      {
+        id: 'seasons',
+        label: t('menu.seasons'),
+        onSelect: () => openPanel('kc-seasons-panel'),
+      },
+      {
+        id: 'market-prices',
+        label: t('menu.prices'),
+        onSelect: () => {
+          openPanel('kc-prices-panel');
+          refreshMarketPrices();
+        },
+      },
+      {
+        id: 'external-tools',
+        label: t('menu.externalTools'),
+        onSelect: () => openPanel('kc-externaltools-panel'),
+      },
+      {
+        id: 'customization',
+        label: t('menu.customization'),
+        onSelect: () => openPanel('kc-customization-panel'),
+      },
+      {
+        id: 'options',
+        label: t('menu.options'),
+        onSelect: () => openPanel('kc-options-panel'),
+      },
+    ];
+  }
 
   // --- Paramètres persistants ---
   //
@@ -87,6 +91,7 @@
   // joueur l'active lui-même dans les Options. Désactivé par défaut.
   const SETTINGS_KEY = 'kc_settings_v1';
   const DEFAULT_SETTINGS = {
+    language: 'fr',
     hasRestaurants: false,
     colorFilterEnabled: false,
     colorFilterHue: 0,
@@ -131,6 +136,7 @@
     activeContactBgColorAlpha: 100,
     mentionLinkColor: '#58A8CF',
     mentionLinkColorAlpha: 100,
+    hideBuildingOverlay: false,
   };
 
   function loadSettings() {
@@ -150,6 +156,321 @@
       // stockage indisponible : le réglage ne sera pas mémorisé, sans gravité
     }
     return settings;
+  }
+
+  // --- Traduction (FR/EN) ---
+  //
+  // currentLanguage est mis en cache au démarrage (et à chaque changement)
+  // plutôt que relu depuis loadSettings() à chaque appel de t() — cette
+  // fonction est appelée très souvent (construction de chaque panneau).
+
+  let currentLanguage = 'fr';
+
+  const I18N = {
+    fr: {
+      'menu.openAria': 'Ouvrir le menu Karmine Tool',
+      'xp.openAria': 'Ouvrir le calculateur XP',
+      'menu.moderators': 'Modérateurs',
+      'menu.events': 'Événements',
+      'menu.realmStats': 'Statistiques du royaume',
+      'menu.seasons': 'Saisons',
+      'menu.prices': 'Prix du marché',
+      'menu.externalTools': 'Outils externes',
+      'menu.customization': 'Personnalisation',
+      'menu.options': 'Options',
+      'common.close': 'Fermer',
+      'common.refresh': 'Actualiser',
+      'common.loading': 'Chargement…',
+      'common.waitingGameData': 'Un instant, en attente des données du jeu…',
+      'common.loadFailed': 'Échec du chargement. Réessaie dans un instant.',
+      'toast.title': 'Bienvenue à bord',
+      'toast.text':
+        "Cette extension est développée par Karmine Corp, un joueur de la communauté Sim Companies, pour améliorer votre expérience de jeu. Retrouvez tous les outils depuis le bouton en haut à droite.",
+      'xp.title': 'Calculateur XP',
+      'xp.levelPlaceholder': 'Niveau —',
+      'xp.progressPlaceholder': '—',
+      'xp.ratePlaceholder': 'Vitesse : —',
+      'xp.etaPlaceholder': '—',
+      'xp.level': 'Niveau {level} — {levelName}',
+      'xp.progress': '{experience} / {experienceToNextLevel} XP ({pct} %)',
+      'xp.rateInstant': 'Vitesse : <span>{rate} XP/h</span> ({parts})',
+      'xp.rateMeasured': 'Vitesse : <span>{rate} XP/h</span> (mesurée)',
+      'xp.staleNote': 'dernière vue sur la carte il y a {minutes} min',
+      'xp.etaLine': 'Niveau suivant dans <span>{duration}</span>',
+      'xp.unavailable': 'Vitesse : indisponible sur cette page',
+      'xp.unavailableHint': "Va sur l'onglet Carte pour une estimation instantanée de tes bâtiments actifs.",
+      'xp.active': 'actif',
+      'xp.actives': 'actifs',
+      'xp.construction': 'en construction',
+      'xp.recreational': 'récréatif',
+      'xp.recreationals': 'récréatifs',
+      'xp.recreationalLevelsLabel': 'Niveau des bâtiments récréatifs :',
+      'xp.recreationalFallback': 'Bâtiment récréatif #{index}',
+      'events.title': 'Événements',
+      'events.openToLoad': 'Ouvre ce panneau pour charger les événements en cours.',
+      'events.none': 'Aucun événement en cours sur ce realm actuellement.',
+      'events.colResource': 'Ressource',
+      'events.colModifier': 'Modif.',
+      'events.colUntil': "Jusqu'au",
+      'events.colSince': 'Depuis',
+      'events.resourceFallback': 'Ressource #{kind}',
+      'prices.title': 'Prix du marché',
+      'prices.hint': 'Prix le plus bas actuellement affiché, toutes qualités confondues.',
+      'prices.searchPlaceholder': 'Rechercher une ressource...',
+      'prices.sortNameAsc': 'Nom A→Z',
+      'prices.sortNameDesc': 'Nom Z→A',
+      'prices.sortPriceDesc': 'Prix décroissant',
+      'prices.sortPriceAsc': 'Prix croissant',
+      'prices.openToLoad': 'Ouvre ce panneau pour charger les prix.',
+      'prices.noMatch': 'Aucune ressource ne correspond à la recherche.',
+      'prices.colResource': 'Ressource',
+      'prices.colPrice': 'Prix',
+      'prices.resourceFallback': 'Ressource #{kind}',
+      'realmStats.title': 'Statistiques du royaume',
+      'realmStats.total': '{count} bâtiments au total',
+      'realmStats.searchPlaceholder': 'Rechercher un bâtiment...',
+      'realmStats.sortCountDesc': 'Les plus construits',
+      'realmStats.sortCountAsc': 'Les moins construits',
+      'realmStats.sortNameAsc': 'Nom A→Z',
+      'realmStats.sortNameDesc': 'Nom Z→A',
+      'realmStats.openToLoad': 'Ouvre ce panneau pour charger les statistiques.',
+      'realmStats.noMatch': 'Aucun bâtiment ne correspond à la recherche.',
+      'realmStats.phaseBoom': 'Boom',
+      'realmStats.phaseNormal': 'Normale',
+      'realmStats.phaseRecession': 'Récession',
+      'seasons.title': 'Saisons',
+      'seasons.production': 'Production',
+      'seasons.retail': 'Vente',
+      'seasons.autumnHarvest': "Récolte d'automne",
+      'seasons.ramadan': 'Ramadan',
+      'seasons.ramadanDates': '18 février – 19 mars',
+      'seasons.easter': 'Pâques',
+      'seasons.easterDates': '2 avril – 12 avril',
+      'seasons.summer': 'Été',
+      'seasons.summerDates': '8 juillet – 29 août',
+      'seasons.halloween': 'Halloween',
+      'seasons.halloweenDates': '10 octobre – 5 novembre',
+      'seasons.xmas': 'Noël',
+      'seasons.xmasDates': '1 décembre – 27 décembre',
+      'moderators.title': 'Modérateurs FR',
+      'moderators.viewProfile': 'Voir le profil en jeu',
+      'externalTools.title': 'Outils externes',
+      'options.title': 'Options',
+      'options.restaurants': 'Je possède des restaurants',
+      'options.restaurantsHint':
+        'Active certains détails spécifiques aux restaurants (ex. le tag "Ingrédient restaurant" dans les Événements). Désactivé, ces détails restent masqués — utile si tu joues un autre type de business.',
+      'options.language': 'Langue de l\'outil',
+      'options.languageHint': "Change la langue de l'interface de Karmine Tool (pas celle du jeu lui-même).",
+      'customization.title': 'Personnalisation',
+      'customization.export': 'Exporter mes réglages',
+      'customization.import': 'Importer mes réglages',
+      'customization.backupHint':
+        "Sauvegarde tous tes réglages de personnalisation dans un fichier sur ton ordinateur. Utile si une mise à jour du jeu (ou un nettoyage du navigateur) vide le stockage local — tu pourras les réimporter d'un clic plutôt que tout reconfigurer à la main.",
+      'customization.colorFilter': 'Filtre de couleur sur le jeu',
+      'customization.colorFilterHint':
+        "Teinte globale appliquée sur le jeu (pas sur cet outil). Le jeu n'ayant pas de palette centralisée, c'est un filtre uniforme plutôt qu'un reskin précis — un effet \"filtre\" plus qu'un vrai thème sur-mesure.",
+      'customization.favicon': 'Favicon dynamique (niveau)',
+      'customization.faviconHint': "Affiche ton niveau actuel directement dans l'icône de l'onglet. Purement cosmétique.",
+      'customization.hideBuildingOverlay': 'Masquer le bandeau sur les bâtiments (carte)',
+      'customization.hideBuildingOverlayHint':
+        "Cache le temps de production restant, la note et le taux d'occupation affichés sur chaque bâtiment de la carte.",
+      'customization.chatColors': 'Personnaliser les couleurs du chat',
+      'customization.resetColors': 'Réinitialiser les couleurs',
+      'customization.chatColorsHint':
+        "S'applique uniquement sur la page Chat. Repose sur une classe interne du jeu qui peut changer à une future mise à jour — sans gravité si ça arrive, la personnalisation cesse juste de s'appliquer.",
+      'customization.customBg': "Fond d'écran personnalisé (carte)",
+      'customization.removeImage': "Retirer l'image",
+      'customization.customBgHint':
+        "Remplace le fond de la carte par une image de ton choix (max environ 3 Mo). S'appuie sur #page, un identifiant du jeu plutôt qu'une classe générée — plus stable.",
+      'chatColor.ownBg': 'Fond — tes messages',
+      'chatColor.ownText': 'Texte — tes messages',
+      'chatColor.otherBg': 'Fond — messages des autres',
+      'chatColor.otherText': 'Texte — messages des autres',
+      'chatColor.convBg': 'Fond de la conversation',
+      'chatColor.senderName': "Pseudo de l'expéditeur (salons publics)",
+      'chatColor.timestamp': 'Horodatage',
+      'chatColor.sectionHeader': 'En-têtes de section (Salons/Contacts)',
+      'chatColor.inputBg': 'Fond — zone de saisie',
+      'chatColor.inputText': 'Texte — zone de saisie',
+      'chatColor.tickerScrollbar': 'Barre de défilement — bandeau de ressources',
+      'chatColor.pageBg': 'Fond de la page (tout le jeu)',
+      'chatColor.topBar': 'Barre du haut',
+      'chatColor.bottomBar': 'Barre du bas (Carte/Entrepôt/...)',
+      'chatColor.statBarText': 'Texte des barres (argent/XP/simboost)',
+      'chatColor.mentionBg': 'Fond — message où tu es cité',
+      'chatColor.activeContactBg': 'Fond — salon/contact ouvert',
+      'chatColor.mentionLink': 'Liens/mentions (tes messages et ceux des autres)',
+      'chatColor.scrollbar': 'Barre de défilement (tout le jeu)',
+      'alert.imageTooLarge': 'Image trop lourde (max environ 3 Mo). Choisis une image plus légère.',
+      'alert.imageSaveFailed':
+        "Échec de l'enregistrement : l'image est trop volumineuse pour le stockage disponible. Essaie une image plus légère.",
+      'alert.imageReadFailed': "Échec de la lecture de l'image. Réessaie avec un autre fichier.",
+      'alert.importInvalidFile': "Fichier invalide : ce n'est pas un export valide de Karmine Tool.",
+      'alert.importNothingFound': 'Aucun réglage reconnu dans ce fichier.',
+      'alert.importReadFailed': 'Échec de la lecture du fichier.',
+      'vwap.tooltipContract': 'VWAP (7 jours, qualité {quality}) : ${vwap} — voir sur SimcoTools',
+      'vwap.tooltipMarket': 'VWAP (7 jours, qualité {quality}) : ${vwap}',
+      'common.opacity': 'Opacité',
+    },
+    en: {
+      'menu.openAria': 'Open the Karmine Tool menu',
+      'xp.openAria': 'Open the XP calculator',
+      'menu.moderators': 'Moderators',
+      'menu.events': 'Events',
+      'menu.realmStats': 'Realm statistics',
+      'menu.seasons': 'Seasons',
+      'menu.prices': 'Market prices',
+      'menu.externalTools': 'External tools',
+      'menu.customization': 'Customization',
+      'menu.options': 'Options',
+      'common.close': 'Close',
+      'common.refresh': 'Refresh',
+      'common.loading': 'Loading…',
+      'common.waitingGameData': 'One moment, waiting for game data…',
+      'common.loadFailed': 'Failed to load. Try again in a moment.',
+      'toast.title': 'Welcome aboard',
+      'toast.text':
+        'This extension is developed by Karmine Corp, a Sim Companies community player, to improve your gaming experience. Find all the tools from the button in the top right corner.',
+      'xp.title': 'XP Calculator',
+      'xp.levelPlaceholder': 'Level —',
+      'xp.progressPlaceholder': '—',
+      'xp.ratePlaceholder': 'Speed: —',
+      'xp.etaPlaceholder': '—',
+      'xp.level': 'Level {level} — {levelName}',
+      'xp.progress': '{experience} / {experienceToNextLevel} XP ({pct}%)',
+      'xp.rateInstant': 'Speed: <span>{rate} XP/h</span> ({parts})',
+      'xp.rateMeasured': 'Speed: <span>{rate} XP/h</span> (measured)',
+      'xp.staleNote': 'last seen on the map {minutes} min ago',
+      'xp.etaLine': 'Next level in <span>{duration}</span>',
+      'xp.unavailable': 'Speed: unavailable on this page',
+      'xp.unavailableHint': 'Go to the Map tab for an instant estimate of your active buildings.',
+      'xp.active': 'active',
+      'xp.actives': 'active',
+      'xp.construction': 'under construction',
+      'xp.recreational': 'recreational',
+      'xp.recreationals': 'recreational',
+      'xp.recreationalLevelsLabel': 'Recreational building levels:',
+      'xp.recreationalFallback': 'Recreational building #{index}',
+      'events.title': 'Events',
+      'events.openToLoad': 'Open this panel to load the current events.',
+      'events.none': 'No events currently active on this realm.',
+      'events.colResource': 'Resource',
+      'events.colModifier': 'Mod.',
+      'events.colUntil': 'Until',
+      'events.colSince': 'Since',
+      'events.resourceFallback': 'Resource #{kind}',
+      'prices.title': 'Market Prices',
+      'prices.hint': 'Currently displayed lowest price, all qualities combined.',
+      'prices.searchPlaceholder': 'Search a resource...',
+      'prices.sortNameAsc': 'Name A→Z',
+      'prices.sortNameDesc': 'Name Z→A',
+      'prices.sortPriceDesc': 'Price descending',
+      'prices.sortPriceAsc': 'Price ascending',
+      'prices.openToLoad': 'Open this panel to load prices.',
+      'prices.noMatch': 'No resource matches your search.',
+      'prices.colResource': 'Resource',
+      'prices.colPrice': 'Price',
+      'prices.resourceFallback': 'Resource #{kind}',
+      'realmStats.title': 'Realm Statistics',
+      'realmStats.total': '{count} buildings total',
+      'realmStats.searchPlaceholder': 'Search a building...',
+      'realmStats.sortCountDesc': 'Most built',
+      'realmStats.sortCountAsc': 'Least built',
+      'realmStats.sortNameAsc': 'Name A→Z',
+      'realmStats.sortNameDesc': 'Name Z→A',
+      'realmStats.openToLoad': 'Open this panel to load statistics.',
+      'realmStats.noMatch': 'No building matches your search.',
+      'realmStats.phaseBoom': 'Boom',
+      'realmStats.phaseNormal': 'Normal',
+      'realmStats.phaseRecession': 'Recession',
+      'seasons.title': 'Seasons',
+      'seasons.production': 'Production',
+      'seasons.retail': 'Retail',
+      'seasons.autumnHarvest': 'Autumn Harvest',
+      'seasons.ramadan': 'Ramadan',
+      'seasons.ramadanDates': 'February 18 – March 19',
+      'seasons.easter': 'Easter',
+      'seasons.easterDates': 'April 2 – April 12',
+      'seasons.summer': 'Summer',
+      'seasons.summerDates': 'July 8 – August 29',
+      'seasons.halloween': 'Halloween',
+      'seasons.halloweenDates': 'October 10 – November 5',
+      'seasons.xmas': 'Christmas',
+      'seasons.xmasDates': 'December 1 – December 27',
+      'moderators.title': 'FR Moderators',
+      'moderators.viewProfile': 'View in-game profile',
+      'externalTools.title': 'External Tools',
+      'options.title': 'Options',
+      'options.restaurants': 'I own restaurants',
+      'options.restaurantsHint':
+        'Enables restaurant-specific details (e.g. the "Restaurant ingredient" tag in Events). When disabled, these details stay hidden — useful if you play another type of business.',
+      'options.language': 'Tool language',
+      'options.languageHint': "Changes the Karmine Tool interface language (not the game's own language).",
+      'customization.title': 'Customization',
+      'customization.export': 'Export my settings',
+      'customization.import': 'Import my settings',
+      'customization.backupHint':
+        'Backs up all your customization settings to a file on your computer. Useful if a game update (or a browser cleanup) clears local storage — you can re-import them in one click instead of reconfiguring everything by hand.',
+      'customization.colorFilter': 'Color filter on the game',
+      'customization.colorFilterHint':
+        "Global hue applied to the game (not to this tool). Since the game has no centralized color palette, this is a uniform filter rather than a precise reskin — more of a \"filter\" effect than a true custom theme.",
+      'customization.favicon': 'Dynamic favicon (level)',
+      'customization.faviconHint': 'Displays your current level directly in the tab icon. Purely cosmetic.',
+      'customization.hideBuildingOverlay': 'Hide building overlay (map)',
+      'customization.hideBuildingOverlayHint':
+        'Hides the remaining production time, rating, and occupancy rate shown on each building on the map.',
+      'customization.chatColors': 'Customize chat colors',
+      'customization.resetColors': 'Reset colors',
+      'customization.chatColorsHint':
+        "Only applies to the Chat page. Relies on an internal game class that may change in a future update — no big deal if that happens, the customization simply stops applying.",
+      'customization.customBg': 'Custom background (map)',
+      'customization.removeImage': 'Remove image',
+      'customization.customBgHint':
+        "Replaces the map background with an image of your choice (max ~3 MB). Relies on #page, a game identifier rather than a generated class — more stable.",
+      'chatColor.ownBg': 'Background — your messages',
+      'chatColor.ownText': 'Text — your messages',
+      'chatColor.otherBg': "Background — others' messages",
+      'chatColor.otherText': "Text — others' messages",
+      'chatColor.convBg': 'Conversation background',
+      'chatColor.senderName': 'Sender name (public rooms)',
+      'chatColor.timestamp': 'Timestamp',
+      'chatColor.sectionHeader': 'Section headers (Rooms/Contacts)',
+      'chatColor.inputBg': 'Background — input box',
+      'chatColor.inputText': 'Text — input box',
+      'chatColor.tickerScrollbar': 'Scrollbar — resource ticker',
+      'chatColor.pageBg': 'Page background (whole game)',
+      'chatColor.topBar': 'Top bar',
+      'chatColor.bottomBar': 'Bottom bar (Map/Warehouse/...)',
+      'chatColor.statBarText': 'Stat bars text (money/XP/simboost)',
+      'chatColor.mentionBg': 'Background — message mentioning you',
+      'chatColor.activeContactBg': 'Background — open room/contact',
+      'chatColor.mentionLink': 'Links/mentions (your messages and others\')',
+      'chatColor.scrollbar': 'Scrollbar (whole game)',
+      'alert.imageTooLarge': 'Image too large (max ~3 MB). Choose a lighter image.',
+      'alert.imageSaveFailed': 'Save failed: the image is too large for the available storage. Try a lighter image.',
+      'alert.imageReadFailed': 'Failed to read the image. Try another file.',
+      'alert.importInvalidFile': 'Invalid file: this is not a valid Karmine Tool export.',
+      'alert.importNothingFound': 'No recognizable settings found in this file.',
+      'alert.importReadFailed': 'Failed to read the file.',
+      'vwap.tooltipContract': 'VWAP (7-day, quality {quality}): ${vwap} — view on SimcoTools',
+      'vwap.tooltipMarket': 'VWAP (7-day, quality {quality}): ${vwap}',
+      'common.opacity': 'Opacity',
+    },
+  };
+
+  function t(key, vars) {
+    const dict = I18N[currentLanguage] || I18N.fr;
+    let str = dict[key] != null ? dict[key] : I18N.fr[key] != null ? I18N.fr[key] : key;
+    if (vars) {
+      Object.keys(vars).forEach((k) => {
+        str = str.replace(new RegExp(`\\{${k}\\}`, 'g'), vars[k]);
+      });
+    }
+    return str;
+  }
+
+  function localeTag() {
+    return currentLanguage === 'en' ? 'en-US' : 'fr-FR';
   }
 
   // --- Filtre de couleur ---
@@ -353,21 +674,42 @@
   function handleCustomBackgroundFile(file, onDone) {
     if (!file) return;
     if (file.size > CUSTOM_BG_MAX_FILE_SIZE) {
-      alert('Image trop lourde (max environ 3 Mo). Choisis une image plus légère.');
+      alert(t('alert.imageTooLarge'));
       return;
     }
     const reader = new FileReader();
     reader.onload = () => {
       const ok = saveCustomBackground(reader.result);
       if (!ok) {
-        alert("Échec de l'enregistrement : l'image est trop volumineuse pour le stockage disponible. Essaie une image plus légère.");
+        alert(t('alert.imageSaveFailed'));
         return;
       }
       applyCustomBackground();
       if (onDone) onDone();
     };
-    reader.onerror = () => alert("Échec de la lecture de l'image. Réessaie avec un autre fichier.");
+    reader.onerror = () => alert(t('alert.imageReadFailed'));
     reader.readAsDataURL(file);
+  }
+
+  // Masque le bloc superposé sur chaque bâtiment de la carte (temps restant
+  // de production + note + taux d'occupation). Les trois infos vivent dans
+  // le même conteneur généré par le jeu (confirmé par capture d'écran),
+  // donc une seule règle CSS suffit à les masquer ensemble.
+  function applyMapOverlayVisibility() {
+    let styleEl = document.getElementById('kc-map-overlay-style');
+    if (!styleEl) {
+      styleEl = document.createElement('style');
+      styleEl.id = 'kc-map-overlay-style';
+      document.head.appendChild(styleEl);
+    }
+    const settings = loadSettings();
+    styleEl.textContent = settings.hideBuildingOverlay
+      ? `
+        .css-19nouqw {
+          display: none !important;
+        }
+      `
+      : '';
   }
 
   // Ingrédients de restaurant (kind IDs internes du jeu) — utilisés pour
@@ -384,13 +726,13 @@
   // la main d'une année sur l'autre (le Ramadan en particulier suit le
   // calendrier lunaire).
   const SEASONS_DATA = {
-    production: [{ name: "Récolte d'automne", emoji: '🎃', dates: '', slug: 'production-seasons', key: 'AutumnHarvest' }],
+    production: [{ nameKey: 'seasons.autumnHarvest', datesKey: null, emoji: '🎃', slug: 'production-seasons', key: 'AutumnHarvest' }],
     retail: [
-      { name: 'Ramadan', emoji: '🌙', dates: '18 février – 19 mars', slug: 'retail-seasons', key: 'Ramadan' },
-      { name: 'Pâques', emoji: '🐰', dates: '2 avril – 12 avril', slug: 'retail-seasons', key: 'Easter' },
-      { name: 'Été', emoji: '🍦', dates: '8 juillet – 29 août', slug: 'retail-seasons', key: 'Summer' },
-      { name: 'Halloween', emoji: '🎃', dates: '10 octobre – 5 novembre', slug: 'retail-seasons', key: 'Halloween' },
-      { name: 'Noël', emoji: '🎄', dates: '1 décembre – 27 décembre', slug: 'retail-seasons', key: 'Xmas' },
+      { nameKey: 'seasons.ramadan', datesKey: 'seasons.ramadanDates', emoji: '🌙', slug: 'retail-seasons', key: 'Ramadan' },
+      { nameKey: 'seasons.easter', datesKey: 'seasons.easterDates', emoji: '🐰', slug: 'retail-seasons', key: 'Easter' },
+      { nameKey: 'seasons.summer', datesKey: 'seasons.summerDates', emoji: '🍦', slug: 'retail-seasons', key: 'Summer' },
+      { nameKey: 'seasons.halloween', datesKey: 'seasons.halloweenDates', emoji: '🎃', slug: 'retail-seasons', key: 'Halloween' },
+      { nameKey: 'seasons.xmas', datesKey: 'seasons.xmasDates', emoji: '🎄', slug: 'retail-seasons', key: 'Xmas' },
     ],
   };
 
@@ -1071,6 +1413,29 @@
     #kc-customization-body {
       padding: 16px;
     }
+    #kc-customization-backup-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    #kc-customization-backup-row .kc-options-reset-btn {
+      margin-top: 0;
+      flex: 1;
+      text-align: center;
+    }
+    #kc-customization-import-label {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+    #kc-customization-import-label input[type='file'] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+    }
     .kc-options-row {
       display: flex;
       align-items: center;
@@ -1664,15 +2029,11 @@
     toast.innerHTML = `
       <span id="kc-toast-status">Karmine Tool</span>
       <div id="kc-toast-body">
-        <p id="kc-toast-title">Bienvenue à bord</p>
-        <p id="kc-toast-text">
-          Cette extension est développée par Karmine Corp, un joueur de la
-          communauté Sim Companies, pour améliorer votre expérience de jeu.
-          Retrouvez tous les outils depuis le bouton en haut à droite.
-        </p>
+        <p id="kc-toast-title">${t('toast.title')}</p>
+        <p id="kc-toast-text">${t('toast.text')}</p>
       </div>
       <div id="kc-toast-footer">
-        <button id="kc-toast-close" type="button">Fermer</button>
+        <button id="kc-toast-close" type="button">${t('common.close')}</button>
       </div>
     `;
     document.body.appendChild(toast);
@@ -1888,7 +2249,7 @@
           badge.rel = 'noopener noreferrer';
           badge.className = `kc-vwap-badge ${diffPct < 0 ? 'kc-vwap-cheap' : 'kc-vwap-expensive'}`;
           badge.textContent = `${diffPct < 0 ? '🟢' : '🔴'} ${diffPct > 0 ? '+' : ''}${diffPct.toFixed(0)}%`;
-          badge.title = `VWAP (7 jours, qualité ${parsed.quality}) : $${vwap.toFixed(3)} — voir sur SimcoTools`;
+          badge.title = t('vwap.tooltipContract', { quality: parsed.quality, vwap: vwap.toFixed(3) });
           const anchor = findUnitPriceElement(row, parsed.unitPrice);
           if (anchor) {
             // Positionnement absolu calculé depuis la position réelle du prix
@@ -1943,7 +2304,7 @@
 
   function formatTickerPrice(price) {
     const decimals = price < 10 ? 3 : 2;
-    return price.toLocaleString('fr-FR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+    return price.toLocaleString(localeTag(), { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
   }
 
   const pricesState = { items: [], search: '', sort: 'name_asc' };
@@ -1963,15 +2324,15 @@
     items = items.slice().sort(sorters[pricesState.sort] || sorters.name_asc);
 
     if (items.length === 0) {
-      body.innerHTML = '<p id="kc-prices-empty">Aucune ressource ne correspond à la recherche.</p>';
+      body.innerHTML = `<p id="kc-prices-empty">${t('prices.noMatch')}</p>`;
       return;
     }
     body.innerHTML = `
       <table class="kc-prices-table">
         <thead>
           <tr>
-            <th>Ressource</th>
-            <th>Prix</th>
+            <th>${t('prices.colResource')}</th>
+            <th>${t('prices.colPrice')}</th>
             <th></th>
           </tr>
         </thead>
@@ -2001,9 +2362,9 @@
   function refreshMarketPrices() {
     if (pricesRefreshInFlight) return Promise.resolve(); // un rafraîchissement est déjà en cours, on ignore ce nouveau clic
     const body = document.getElementById('kc-prices-body');
-    if (body) body.innerHTML = '<p id="kc-prices-empty">Chargement…</p>';
+    if (body) body.innerHTML = `<p id="kc-prices-empty">${t('common.loading')}</p>`;
     if (currentRealmId == null) {
-      if (body) body.innerHTML = '<p id="kc-prices-empty">Un instant, en attente des données du jeu…</p>';
+      if (body) body.innerHTML = `<p id="kc-prices-empty">${t('common.waitingGameData')}</p>`;
       return Promise.resolve();
     }
     pricesRefreshInFlight = true;
@@ -2011,7 +2372,7 @@
       .then(([ticker, resourceNames]) => {
         pricesState.items = ticker.map((it) => ({
           kind: it.kind,
-          name: resourceNames[it.kind] || `Ressource #${it.kind}`,
+          name: resourceNames[it.kind] || t('prices.resourceFallback', { kind: it.kind }),
           price: it.price,
           isUp: it.is_up,
         }));
@@ -2019,7 +2380,7 @@
       })
       .catch((err) => {
         console.error('[Karmine Tool] Échec du chargement des prix du marché :', err);
-        if (body) body.innerHTML = '<p id="kc-prices-empty">Échec du chargement. Réessaie dans un instant.</p>';
+        if (body) body.innerHTML = `<p id="kc-prices-empty">${t('common.loadFailed')}</p>`;
       })
       .finally(() => {
         pricesRefreshInFlight = false;
@@ -2031,23 +2392,23 @@
     panel.id = 'kc-prices-panel';
     panel.setAttribute('role', 'status');
     panel.innerHTML = `
-      <span id="kc-prices-status">Karmine Tool — Prix du marché</span>
-      <p id="kc-prices-hint">Prix le plus bas actuellement affiché, toutes qualités confondues.</p>
+      <span id="kc-prices-status">Karmine Tool — ${t('prices.title')}</span>
+      <p id="kc-prices-hint">${t('prices.hint')}</p>
       <div id="kc-prices-controls">
-        <input type="text" id="kc-prices-search" placeholder="Rechercher une ressource..." />
+        <input type="text" id="kc-prices-search" placeholder="${t('prices.searchPlaceholder')}" />
         <select id="kc-prices-sort">
-          <option value="name_asc">Nom A→Z</option>
-          <option value="name_desc">Nom Z→A</option>
-          <option value="price_desc">Prix décroissant</option>
-          <option value="price_asc">Prix croissant</option>
+          <option value="name_asc">${t('prices.sortNameAsc')}</option>
+          <option value="name_desc">${t('prices.sortNameDesc')}</option>
+          <option value="price_desc">${t('prices.sortPriceDesc')}</option>
+          <option value="price_asc">${t('prices.sortPriceAsc')}</option>
         </select>
       </div>
       <div id="kc-prices-body">
-        <p id="kc-prices-empty">Ouvre ce panneau pour charger les prix.</p>
+        <p id="kc-prices-empty">${t('prices.openToLoad')}</p>
       </div>
       <div id="kc-prices-footer">
-        <button id="kc-prices-refresh" type="button">Actualiser</button>
-        <button id="kc-prices-close" type="button">Fermer</button>
+        <button id="kc-prices-refresh" type="button">${t('common.refresh')}</button>
+        <button id="kc-prices-close" type="button">${t('common.close')}</button>
       </div>
     `;
     document.body.appendChild(panel);
@@ -2121,7 +2482,7 @@
         recreationalCount += 1;
         // Le nom du bâtiment est donné avant le ":" ("Temple: Entretien, ...").
         const nameMatch = actionLabel.match(/^([^:]+):/);
-        const name = nameMatch ? nameMatch[1].trim() : `Bâtiment récréatif #${recreationalCount}`;
+        const name = nameMatch ? nameMatch[1].trim() : t('xp.recreationalFallback', { index: recreationalCount });
         // L'URL du bâtiment (ex. "/fr/b/46896446/") sert d'identifiant stable
         // pour mémoriser son niveau — contrairement à sa position dans la
         // liste, qui peut changer si un bâtiment est ajouté/réordonné.
@@ -2225,12 +2586,16 @@
 
     const panel = document.getElementById('kc-xp-panel');
     if (!panel) return;
+    const locale = localeTag();
 
     const progressPct = Math.min(100, (levelInfo.experience / levelInfo.experienceToNextLevel) * 100);
-    panel.querySelector('#kc-xp-level').textContent = `Niveau ${levelInfo.level} — ${levelInfo.levelName}`;
+    panel.querySelector('#kc-xp-level').textContent = t('xp.level', { level: levelInfo.level, levelName: levelInfo.levelName });
     panel.querySelector('#kc-xp-fill').style.width = `${progressPct.toFixed(1)}%`;
-    panel.querySelector('#kc-xp-progress-text').textContent =
-      `${levelInfo.experience.toLocaleString('fr-FR')} / ${levelInfo.experienceToNextLevel.toLocaleString('fr-FR')} XP (${progressPct.toFixed(1)} %)`;
+    panel.querySelector('#kc-xp-progress-text').textContent = t('xp.progress', {
+      experience: levelInfo.experience.toLocaleString(locale),
+      experienceToNextLevel: levelInfo.experienceToNextLevel.toLocaleString(locale),
+      pct: progressPct.toFixed(1),
+    });
 
     const rateEl = panel.querySelector('#kc-xp-rate');
     const etaEl = panel.querySelector('#kc-xp-eta');
@@ -2238,28 +2603,28 @@
     if (rateInfo) {
       let rateLabel;
       if (rateInfo.source === 'instant' || rateInfo.source === 'cached') {
-        const parts = [`${rateInfo.activeCount} actif${rateInfo.activeCount > 1 ? 's' : ''}`];
+        const parts = [`${rateInfo.activeCount} ${rateInfo.activeCount > 1 ? t('xp.actives') : t('xp.active')}`];
         if (rateInfo.constructionCount > 0) {
-          parts.push(`${rateInfo.constructionCount} en construction`);
+          parts.push(`${rateInfo.constructionCount} ${t('xp.construction')}`);
         }
         if (rateInfo.recreationalCount > 0) {
-          parts.push(`${rateInfo.recreationalCount} récréatif${rateInfo.recreationalCount > 1 ? 's' : ''}`);
+          parts.push(`${rateInfo.recreationalCount} ${rateInfo.recreationalCount > 1 ? t('xp.recreationals') : t('xp.recreational')}`);
         }
-        rateLabel = `Vitesse : <span>${rateInfo.xpPerHour.toLocaleString('fr-FR')} XP/h</span> (${parts.join(', ')})`;
+        rateLabel = t('xp.rateInstant', { rate: rateInfo.xpPerHour.toLocaleString(locale), parts: parts.join(', ') });
         if (rateInfo.source === 'cached') {
           const ageMinutes = Math.round((Date.now() - rateInfo.at) / 60000);
-          rateLabel += `<br><span class="kc-xp-stale">dernière vue sur la carte il y a ${ageMinutes} min</span>`;
+          rateLabel += `<br><span class="kc-xp-stale">${t('xp.staleNote', { minutes: ageMinutes })}</span>`;
         }
       } else {
-        rateLabel = `Vitesse : <span>${Math.round(rateInfo.xpPerHour).toLocaleString('fr-FR')} XP/h</span> (mesurée)`;
+        rateLabel = t('xp.rateMeasured', { rate: Math.round(rateInfo.xpPerHour).toLocaleString(locale) });
       }
       rateEl.innerHTML = rateLabel;
       const remaining = levelInfo.experienceToNextLevel - levelInfo.experience;
       const etaHours = remaining / rateInfo.xpPerHour;
-      etaEl.innerHTML = `Niveau suivant dans <span>${formatDuration(etaHours)}</span>`;
+      etaEl.innerHTML = t('xp.etaLine', { duration: formatDuration(etaHours) });
     } else {
-      rateEl.textContent = 'Vitesse : indisponible sur cette page';
-      etaEl.textContent = 'Va sur l’onglet Carte pour une estimation instantanée de tes bâtiments actifs.';
+      rateEl.textContent = t('xp.unavailable');
+      etaEl.textContent = t('xp.unavailableHint');
     }
 
     // Champs éditables pour le niveau des bâtiments récréatifs — non
@@ -2277,11 +2642,11 @@
           (rateInfo && rateInfo.recreationalBuildings) ||
           ((rateInfo && rateInfo.recreationalNames) || []).map((name, i) => ({ id: `legacy-${i}`, name }));
         recreationalEl.innerHTML =
-          '<p class="kc-xp-recreational-label">Niveau des bâtiments récréatifs :</p>' +
+          `<p class="kc-xp-recreational-label">${t('xp.recreationalLevelsLabel')}</p>` +
           buildings
             .map((b, i) => {
               const level = storedLevels[b.id] || 1;
-              const label = b.name || `Bâtiment récréatif #${i + 1}`;
+              const label = b.name || t('xp.recreationalFallback', { index: i + 1 });
               return `
                 <label class="kc-xp-recreational-row">
                   <span>${escapeHtml(label)}</span>
@@ -2309,18 +2674,18 @@
     panel.id = 'kc-xp-panel';
     panel.setAttribute('role', 'status');
     panel.innerHTML = `
-      <span id="kc-xp-status">Karmine Tool — Calculateur XP</span>
+      <span id="kc-xp-status">Karmine Tool — ${t('xp.title')}</span>
       <div id="kc-xp-body">
-        <p id="kc-xp-level">Niveau —</p>
+        <p id="kc-xp-level">${t('xp.levelPlaceholder')}</p>
         <div id="kc-xp-track"><div id="kc-xp-fill"></div></div>
-        <p id="kc-xp-progress-text">—</p>
-        <p id="kc-xp-rate">Vitesse : —</p>
-        <p id="kc-xp-eta">—</p>
+        <p id="kc-xp-progress-text">${t('xp.progressPlaceholder')}</p>
+        <p id="kc-xp-rate">${t('xp.ratePlaceholder')}</p>
+        <p id="kc-xp-eta">${t('xp.etaPlaceholder')}</p>
         <div id="kc-xp-recreational"></div>
       </div>
       <div id="kc-xp-footer">
-        <button id="kc-xp-refresh" type="button">Actualiser</button>
-        <button id="kc-xp-close" type="button">Fermer</button>
+        <button id="kc-xp-refresh" type="button">${t('common.refresh')}</button>
+        <button id="kc-xp-close" type="button">${t('common.close')}</button>
       </div>
     `;
     document.body.appendChild(panel);
@@ -2406,7 +2771,7 @@
       const badge = document.createElement('span');
       badge.className = `kc-vwap-badge ${diffPct < 0 ? 'kc-vwap-cheap' : 'kc-vwap-expensive'}`;
       badge.textContent = `${diffPct < 0 ? '🟢' : '🔴'} ${diffPct > 0 ? '+' : ''}${diffPct.toFixed(0)}%`;
-      badge.title = `VWAP (7 jours, qualité ${parsed.quality}) : $${vwap.toFixed(3)}`;
+      badge.title = t('vwap.tooltipMarket', { quality: parsed.quality, vwap: vwap.toFixed(3) });
       priceCell.appendChild(badge);
     });
   }
@@ -2509,7 +2874,7 @@
   }
 
   function formatShortDate(dateStr) {
-    return new Date(dateStr).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' });
+    return new Date(dateStr).toLocaleDateString(localeTag(), { day: '2-digit', month: '2-digit', year: '2-digit' });
   }
 
   function renderEventRow(event, resourceNames) {
@@ -2517,7 +2882,7 @@
     const untilMs = new Date(event.until).getTime();
     const hoursLeft = (untilMs - now) / 3_600_000;
     const modifier = event.speedModifier;
-    const resourceName = resourceNames[event.kind] || `Ressource #${event.kind}`;
+    const resourceName = resourceNames[event.kind] || t('events.resourceFallback', { kind: event.kind });
     const modifierClass = modifier > 0 ? 'kc-positive' : 'kc-negative';
     const modifierText = `${modifier > 0 ? '+' : ''}${modifier}%`;
     const isIngredient = loadSettings().hasRestaurants && RESTAURANT_INGREDIENT_IDS.has(event.kind);
@@ -2544,17 +2909,17 @@
       .sort((a, b) => new Date(b.since) - new Date(a.since));
 
     if (active.length === 0) {
-      body.innerHTML = '<p id="kc-events-empty">Aucun événement en cours sur ce realm actuellement.</p>';
+      body.innerHTML = `<p id="kc-events-empty">${t('events.none')}</p>`;
       return;
     }
     body.innerHTML = `
       <table class="kc-events-table">
         <thead>
           <tr>
-            <th>Ressource</th>
-            <th>Modif.</th>
-            <th>Jusqu'au</th>
-            <th>Depuis</th>
+            <th>${t('events.colResource')}</th>
+            <th>${t('events.colModifier')}</th>
+            <th>${t('events.colUntil')}</th>
+            <th>${t('events.colSince')}</th>
           </tr>
         </thead>
         <tbody>
@@ -2570,12 +2935,11 @@
     if (eventsRefreshInFlight) return Promise.resolve(); // un rafraîchissement est déjà en cours, on ignore ce nouveau clic
     const panel = document.getElementById('kc-events-panel');
     if (panel) {
-      panel.querySelector('#kc-events-body').innerHTML = '<p id="kc-events-empty">Chargement…</p>';
+      panel.querySelector('#kc-events-body').innerHTML = `<p id="kc-events-empty">${t('common.loading')}</p>`;
     }
     if (currentRealmId == null) {
       if (panel) {
-        panel.querySelector('#kc-events-body').innerHTML =
-          '<p id="kc-events-empty">Un instant, en attente des données du jeu…</p>';
+        panel.querySelector('#kc-events-body').innerHTML = `<p id="kc-events-empty">${t('common.waitingGameData')}</p>`;
       }
       return Promise.resolve();
     }
@@ -2589,8 +2953,7 @@
       .catch((err) => {
         console.error('[Karmine Tool] Échec du chargement des événements marché :', err);
         if (panel) {
-          panel.querySelector('#kc-events-body').innerHTML =
-            '<p id="kc-events-empty">Échec du chargement. Réessaie dans un instant.</p>';
+          panel.querySelector('#kc-events-body').innerHTML = `<p id="kc-events-empty">${t('common.loadFailed')}</p>`;
         }
       })
       .finally(() => {
@@ -2603,13 +2966,13 @@
     panel.id = 'kc-events-panel';
     panel.setAttribute('role', 'status');
     panel.innerHTML = `
-      <span id="kc-events-status">Karmine Tool — Événements</span>
+      <span id="kc-events-status">Karmine Tool — ${t('events.title')}</span>
       <div id="kc-events-body">
-        <p id="kc-events-empty">Ouvre ce panneau pour charger les événements en cours.</p>
+        <p id="kc-events-empty">${t('events.openToLoad')}</p>
       </div>
       <div id="kc-events-footer">
-        <button id="kc-events-refresh" type="button">Actualiser</button>
-        <button id="kc-events-close" type="button">Fermer</button>
+        <button id="kc-events-refresh" type="button">${t('common.refresh')}</button>
+        <button id="kc-events-close" type="button">${t('common.close')}</button>
       </div>
     `;
     document.body.appendChild(panel);
@@ -2622,25 +2985,25 @@
   // Liste des couleurs personnalisables du chat — un tableau plutôt que du
   // HTML répété à la main, plus simple à faire évoluer.
   const CHAT_COLOR_FIELDS = [
-    { id: 'own-bg', settingKey: 'chatOwnBubbleColor', label: 'Fond — tes messages' },
-    { id: 'own-text', settingKey: 'chatOwnTextColor', label: 'Texte — tes messages' },
-    { id: 'other-bg', settingKey: 'chatOtherBubbleColor', label: 'Fond — messages des autres' },
-    { id: 'other-text', settingKey: 'chatOtherBubbleTextColor', label: 'Texte — messages des autres' },
-    { id: 'conv-bg', settingKey: 'chatConversationBgColor', label: 'Fond de la conversation' },
-    { id: 'sender-name', settingKey: 'chatSenderNameColor', label: "Pseudo de l'expéditeur (salons publics)" },
-    { id: 'timestamp', settingKey: 'chatTimestampColor', label: 'Horodatage' },
-    { id: 'section-header', settingKey: 'chatSectionHeaderColor', label: 'En-têtes de section (Salons/Contacts)' },
-    { id: 'input-bg', settingKey: 'chatInputBgColor', label: 'Fond — zone de saisie' },
-    { id: 'input-text', settingKey: 'chatInputTextColor', label: 'Texte — zone de saisie' },
-    { id: 'ticker-scrollbar', settingKey: 'resourceTickerScrollbarColor', label: 'Barre de défilement — bandeau de ressources' },
-    { id: 'page-bg', settingKey: 'pageBgColor', label: 'Fond de la page (tout le jeu)' },
-    { id: 'top-bar', settingKey: 'topBarColor', label: 'Barre du haut' },
-    { id: 'bottom-bar', settingKey: 'bottomBarColor', label: 'Barre du bas (Carte/Entrepôt/...)' },
-    { id: 'stat-bar-text', settingKey: 'statBarTextColor', label: 'Texte des barres (argent/XP/simboost)' },
-    { id: 'mention-bg', settingKey: 'mentionBgColor', label: 'Fond — message où tu es cité' },
-    { id: 'active-contact-bg', settingKey: 'activeContactBgColor', label: 'Fond — salon/contact ouvert' },
-    { id: 'mention-link', settingKey: 'mentionLinkColor', label: 'Liens/mentions (tes messages et ceux des autres)' },
-    { id: 'scrollbar', settingKey: 'chatScrollbarColor', label: 'Barre de défilement (tout le jeu)' },
+    { id: 'own-bg', settingKey: 'chatOwnBubbleColor', labelKey: 'chatColor.ownBg' },
+    { id: 'own-text', settingKey: 'chatOwnTextColor', labelKey: 'chatColor.ownText' },
+    { id: 'other-bg', settingKey: 'chatOtherBubbleColor', labelKey: 'chatColor.otherBg' },
+    { id: 'other-text', settingKey: 'chatOtherBubbleTextColor', labelKey: 'chatColor.otherText' },
+    { id: 'conv-bg', settingKey: 'chatConversationBgColor', labelKey: 'chatColor.convBg' },
+    { id: 'sender-name', settingKey: 'chatSenderNameColor', labelKey: 'chatColor.senderName' },
+    { id: 'timestamp', settingKey: 'chatTimestampColor', labelKey: 'chatColor.timestamp' },
+    { id: 'section-header', settingKey: 'chatSectionHeaderColor', labelKey: 'chatColor.sectionHeader' },
+    { id: 'input-bg', settingKey: 'chatInputBgColor', labelKey: 'chatColor.inputBg' },
+    { id: 'input-text', settingKey: 'chatInputTextColor', labelKey: 'chatColor.inputText' },
+    { id: 'ticker-scrollbar', settingKey: 'resourceTickerScrollbarColor', labelKey: 'chatColor.tickerScrollbar' },
+    { id: 'page-bg', settingKey: 'pageBgColor', labelKey: 'chatColor.pageBg' },
+    { id: 'top-bar', settingKey: 'topBarColor', labelKey: 'chatColor.topBar' },
+    { id: 'bottom-bar', settingKey: 'bottomBarColor', labelKey: 'chatColor.bottomBar' },
+    { id: 'stat-bar-text', settingKey: 'statBarTextColor', labelKey: 'chatColor.statBarText' },
+    { id: 'mention-bg', settingKey: 'mentionBgColor', labelKey: 'chatColor.mentionBg' },
+    { id: 'active-contact-bg', settingKey: 'activeContactBgColor', labelKey: 'chatColor.activeContactBg' },
+    { id: 'mention-link', settingKey: 'mentionLinkColor', labelKey: 'chatColor.mentionLink' },
+    { id: 'scrollbar', settingKey: 'chatScrollbarColor', labelKey: 'chatColor.scrollbar' },
   ];
 
   function createOptionsPanel() {
@@ -2649,21 +3012,24 @@
     panel.setAttribute('role', 'status');
     const settings = loadSettings();
     panel.innerHTML = `
-      <span id="kc-options-status">Karmine Tool — Options</span>
+      <span id="kc-options-status">Karmine Tool — ${t('options.title')}</span>
       <div id="kc-options-body">
         <label class="kc-options-row">
           <input type="checkbox" id="kc-options-restaurants" ${settings.hasRestaurants ? 'checked' : ''} />
-          <span>Je possède des restaurants</span>
+          <span>${t('options.restaurants')}</span>
         </label>
-        <p class="kc-options-hint">
-          Active certains détails spécifiques aux restaurants (ex. le tag
-          "Ingrédient restaurant" dans les Événements). Désactivé, ces
-          détails restent masqués — utile si tu joues un autre type de
-          business.
-        </p>
+        <p class="kc-options-hint">${t('options.restaurantsHint')}</p>
+        <label class="kc-options-row" style="margin-top:14px;justify-content:space-between;">
+          <span>${t('options.language')}</span>
+        </label>
+        <select id="kc-options-language" style="margin-top:8px;width:100%;">
+          <option value="fr" ${settings.language === 'fr' ? 'selected' : ''}>Français</option>
+          <option value="en" ${settings.language === 'en' ? 'selected' : ''}>English</option>
+        </select>
+        <p class="kc-options-hint">${t('options.languageHint')}</p>
       </div>
       <div id="kc-options-footer">
-        <button id="kc-options-close" type="button">Fermer</button>
+        <button id="kc-options-close" type="button">${t('common.close')}</button>
       </div>
     `;
     document.body.appendChild(panel);
@@ -2673,10 +3039,81 @@
       renderEventsPanel(lastFetchedEvents, lastResourceNames); // ré-affiche instantanément sans nouvel appel réseau
     });
 
+    panel.querySelector('#kc-options-language').addEventListener('change', (e) => {
+      saveSettings({ language: e.target.value });
+      currentLanguage = e.target.value;
+      rebuildAllPanelsForLanguageChange();
+    });
+
     panel.querySelector('#kc-options-close').addEventListener('click', () => closeAllPanels());
   }
 
   // --- Personnalisation (filtre couleur, favicon, couleurs du chat, fond d'écran) ---
+
+  // Export/import : une mise à jour du jeu (ou un nettoyage du navigateur)
+  // peut vider le stockage local et donc tous les réglages de
+  // personnalisation d'un coup. On garde ces trois clés volontairement
+  // séparées de la logique normale de sauvegarde — c'est une vraie
+  // sauvegarde manuelle sur le poste de l'utilisateur, pas juste un
+  // rafraîchissement de plus.
+  const EXPORT_STORAGE_KEYS = [SETTINGS_KEY, RECREATIONAL_LEVELS_KEY, CUSTOM_BG_KEY];
+
+  function exportCustomizationSettings() {
+    const data = {};
+    EXPORT_STORAGE_KEYS.forEach((key) => {
+      try {
+        const value = localStorage.getItem(key);
+        if (value != null) data[key] = value;
+      } catch (err) {
+        // stockage indisponible pour cette clé : on continue avec les autres
+      }
+    });
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `karmine-tool-reglages-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function importCustomizationSettingsFile(file, onDone) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      let data;
+      try {
+        data = JSON.parse(reader.result);
+      } catch (err) {
+        alert(t('alert.importInvalidFile'));
+        return;
+      }
+      let restoredAny = false;
+      EXPORT_STORAGE_KEYS.forEach((key) => {
+        if (data[key] == null) return;
+        try {
+          localStorage.setItem(key, data[key]);
+          restoredAny = true;
+        } catch (err) {
+          // quota dépassé sur cette clé précise : on continue avec les autres
+        }
+      });
+      if (!restoredAny) {
+        alert(t('alert.importNothingFound'));
+        return;
+      }
+      applyColorFilter();
+      applyChatColors();
+      applyCustomBackground();
+      applyMapOverlayVisibility();
+      applyDynamicFavicon(lastKnownLevel);
+      if (onDone) onDone();
+    };
+    reader.onerror = () => alert(t('alert.importReadFailed'));
+    reader.readAsText(file);
+  }
 
   function createCustomizationPanel() {
     const panel = document.createElement('div');
@@ -2685,11 +3122,19 @@
     const settings = loadSettings();
     const hasCustomBg = !!loadCustomBackground();
     panel.innerHTML = `
-      <span id="kc-customization-status">Karmine Tool — Personnalisation</span>
+      <span id="kc-customization-status">Karmine Tool — ${t('customization.title')}</span>
       <div id="kc-customization-body">
+        <div id="kc-customization-backup-row">
+          <button id="kc-customization-export" type="button" class="kc-options-reset-btn">${t('customization.export')}</button>
+          <label id="kc-customization-import-label" class="kc-options-reset-btn">
+            ${t('customization.import')}
+            <input type="file" id="kc-customization-import" accept="application/json" />
+          </label>
+        </div>
+        <p class="kc-options-hint">${t('customization.backupHint')}</p>
         <label class="kc-options-row">
           <input type="checkbox" id="kc-customization-color-filter" ${settings.colorFilterEnabled ? 'checked' : ''} />
-          <span>Filtre de couleur sur le jeu</span>
+          <span>${t('customization.colorFilter')}</span>
         </label>
         <div class="kc-options-hue-row">
           <input
@@ -2703,29 +3148,26 @@
           />
           <span id="kc-customization-hue-value">${settings.colorFilterHue}°</span>
         </div>
-        <p class="kc-options-hint">
-          Teinte globale appliquée sur le jeu (pas sur cet outil). Le jeu
-          n'ayant pas de palette centralisée, c'est un filtre uniforme
-          plutôt qu'un reskin précis — un effet "filtre" plus qu'un vrai
-          thème sur-mesure.
-        </p>
+        <p class="kc-options-hint">${t('customization.colorFilterHint')}</p>
         <label class="kc-options-row">
           <input type="checkbox" id="kc-customization-favicon" ${settings.faviconEnabled ? 'checked' : ''} />
-          <span>Favicon dynamique (niveau)</span>
+          <span>${t('customization.favicon')}</span>
         </label>
-        <p class="kc-options-hint">
-          Affiche ton niveau actuel directement dans l'icône de l'onglet.
-          Purement cosmétique.
-        </p>
+        <p class="kc-options-hint">${t('customization.faviconHint')}</p>
+        <label class="kc-options-row">
+          <input type="checkbox" id="kc-customization-building-overlay" ${settings.hideBuildingOverlay ? 'checked' : ''} />
+          <span>${t('customization.hideBuildingOverlay')}</span>
+        </label>
+        <p class="kc-options-hint">${t('customization.hideBuildingOverlayHint')}</p>
         <label class="kc-options-row">
           <input type="checkbox" id="kc-customization-chat-colors" ${settings.chatColorsEnabled ? 'checked' : ''} />
-          <span>Personnaliser les couleurs du chat</span>
+          <span>${t('customization.chatColors')}</span>
         </label>
         <div class="kc-options-chat-colors-grid">
           ${CHAT_COLOR_FIELDS.map(
             (f) => `
               <label class="kc-options-color-row">
-                <span>${f.label}</span>
+                <span>${t(f.labelKey)}</span>
                 <span class="kc-options-color-controls">
                   <input
                     type="color"
@@ -2742,7 +3184,7 @@
                     class="kc-options-alpha-slider"
                     data-alpha-key="${f.settingKey}Alpha"
                     value="${settings[`${f.settingKey}Alpha`]}"
-                    title="Opacité"
+                    title="${t('common.opacity')}"
                     ${settings.chatColorsEnabled ? '' : 'disabled'}
                   />
                 </span>
@@ -2751,32 +3193,38 @@
           ).join('')}
         </div>
         <button id="kc-customization-chat-reset" type="button" class="kc-options-reset-btn" ${settings.chatColorsEnabled ? '' : 'disabled'}>
-          Réinitialiser les couleurs
+          ${t('customization.resetColors')}
         </button>
-        <p class="kc-options-hint">
-          S'applique uniquement sur la page Chat. Repose sur une classe
-          interne du jeu qui peut changer à une future mise à jour — sans
-          gravité si ça arrive, la personnalisation cesse juste de
-          s'appliquer.
-        </p>
+        <p class="kc-options-hint">${t('customization.chatColorsHint')}</p>
         <label class="kc-options-row" style="margin-top:14px;">
-          <span>Fond d'écran personnalisé (carte)</span>
+          <span>${t('customization.customBg')}</span>
         </label>
         <input type="file" id="kc-customization-bg-file" accept="image/*" style="margin-top:8px;width:100%;font-size:11px;color:#C7D0DB;" />
         <button id="kc-customization-bg-remove" type="button" class="kc-options-reset-btn" ${hasCustomBg ? '' : 'disabled'} style="margin-top:8px;">
-          Retirer l'image
+          ${t('customization.removeImage')}
         </button>
-        <p class="kc-options-hint">
-          Remplace le fond de la carte par une image de ton choix (max
-          environ 3 Mo). S'appuie sur #page, un identifiant du jeu plutôt
-          qu'une classe générée — plus stable.
-        </p>
+        <p class="kc-options-hint">${t('customization.customBgHint')}</p>
       </div>
       <div id="kc-customization-footer">
-        <button id="kc-customization-close" type="button">Fermer</button>
+        <button id="kc-customization-close" type="button">${t('common.close')}</button>
       </div>
     `;
     document.body.appendChild(panel);
+
+    panel.querySelector('#kc-customization-export').addEventListener('click', () => exportCustomizationSettings());
+    panel.querySelector('#kc-customization-import').addEventListener('change', (e) => {
+      const file = e.target.files && e.target.files[0];
+      importCustomizationSettingsFile(file, () => {
+        // Les valeurs affichées (cases, couleurs, curseurs) datent de la
+        // création du panneau : le plus simple et le plus sûr après un
+        // import est de reconstruire le panneau à neuf avec les valeurs
+        // fraîchement restaurées, plutôt que de mettre à jour chaque champ
+        // un par un.
+        panel.remove();
+        createCustomizationPanel();
+        openPanel('kc-customization-panel');
+      });
+    });
 
     panel.querySelector('#kc-customization-bg-file').addEventListener('change', (e) => {
       const file = e.target.files && e.target.files[0];
@@ -2808,6 +3256,11 @@
     panel.querySelector('#kc-customization-favicon').addEventListener('change', (e) => {
       saveSettings({ faviconEnabled: e.target.checked });
       applyDynamicFavicon(lastKnownLevel);
+    });
+
+    panel.querySelector('#kc-customization-building-overlay').addEventListener('change', (e) => {
+      saveSettings({ hideBuildingOverlay: e.target.checked });
+      applyMapOverlayVisibility();
     });
 
     const chatColorInputs = panel.querySelectorAll('.kc-options-chat-colors-grid input[data-setting-key]');
@@ -2854,12 +3307,14 @@
 
   // --- Statistiques du royaume (API publique SimcoTools) ---
 
-  const PHASE_LABELS = {
-    boom: 'Boom',
-    expansion: 'Boom',
-    normal: 'Normale',
-    recession: 'Récession',
-  };
+  function getPhaseLabels() {
+    return {
+      boom: t('realmStats.phaseBoom'),
+      expansion: t('realmStats.phaseBoom'),
+      normal: t('realmStats.phaseNormal'),
+      recession: t('realmStats.phaseRecession'),
+    };
+  }
   const PHASE_CLASSES = {
     boom: 'kc-phase-boom',
     expansion: 'kc-phase-boom',
@@ -2897,7 +3352,7 @@
     items = items.slice().sort(sorters[realmStatsState.sort] || sorters.count_desc);
 
     if (items.length === 0) {
-      list.innerHTML = '<p id="kc-realmstats-empty">Aucun bâtiment ne correspond à la recherche.</p>';
+      list.innerHTML = `<p id="kc-realmstats-empty">${t('realmStats.noMatch')}</p>`;
       return;
     }
     const maxCount = Math.max(...items.map((b) => b.count), 1);
@@ -2909,7 +3364,7 @@
           <div class="kc-realmstats-row">
             <div class="kc-realmstats-row-top">
               <span class="kc-realmstats-row-name">${escapeHtml(b.name)}</span>
-              <span class="kc-realmstats-row-value">${proportionPct}% (${b.count.toLocaleString('fr-FR')})</span>
+              <span class="kc-realmstats-row-value">${proportionPct}% (${b.count.toLocaleString(localeTag())})</span>
             </div>
             <div class="kc-realmstats-bar-track">
               <div class="kc-realmstats-bar-fill" style="width:${pct.toFixed(1)}%"></div>
@@ -2924,12 +3379,13 @@
     const totalEl = document.getElementById('kc-realmstats-total');
     const phaseEl = document.getElementById('kc-realmstats-phase');
     if (totalEl) {
-      totalEl.innerHTML = `<strong>${realmStatsState.totalBuildings.toLocaleString('fr-FR')}</strong> bâtiments au total`;
+      totalEl.innerHTML = t('realmStats.total', { count: `<strong>${realmStatsState.totalBuildings.toLocaleString(localeTag())}</strong>` });
     }
     if (phaseEl) {
       if (realmStatsState.phase) {
         const key = realmStatsState.phase.toLowerCase();
-        phaseEl.textContent = PHASE_LABELS[key] || realmStatsState.phase;
+        const phaseLabels = getPhaseLabels();
+        phaseEl.textContent = phaseLabels[key] || realmStatsState.phase;
         phaseEl.className = `kc-phase-badge ${PHASE_CLASSES[key] || 'kc-phase-normal'}`;
         phaseEl.style.display = '';
       } else {
@@ -2943,9 +3399,9 @@
   function refreshRealmStats() {
     if (realmStatsRefreshInFlight) return; // un rafraîchissement est déjà en cours, on ignore ce nouveau clic
     const list = document.getElementById('kc-realmstats-list');
-    if (list) list.innerHTML = '<p id="kc-realmstats-empty">Chargement…</p>';
+    if (list) list.innerHTML = `<p id="kc-realmstats-empty">${t('common.loading')}</p>`;
     if (currentRealmId == null) {
-      if (list) list.innerHTML = '<p id="kc-realmstats-empty">Un instant, en attente des données du jeu…</p>';
+      if (list) list.innerHTML = `<p id="kc-realmstats-empty">${t('common.waitingGameData')}</p>`;
       return;
     }
     realmStatsRefreshInFlight = true;
@@ -2959,7 +3415,7 @@
       })
       .catch((err) => {
         console.error('[Karmine Tool] Échec du chargement des statistiques du royaume :', err);
-        if (list) list.innerHTML = '<p id="kc-realmstats-empty">Échec du chargement. Réessaie dans un instant.</p>';
+        if (list) list.innerHTML = `<p id="kc-realmstats-empty">${t('common.loadFailed')}</p>`;
       })
       .finally(() => {
         realmStatsRefreshInFlight = false;
@@ -2971,26 +3427,26 @@
     panel.id = 'kc-realmstats-panel';
     panel.setAttribute('role', 'status');
     panel.innerHTML = `
-      <span id="kc-realmstats-status">Karmine Tool — Statistiques du royaume</span>
+      <span id="kc-realmstats-status">Karmine Tool — ${t('realmStats.title')}</span>
       <div id="kc-realmstats-summary">
         <span id="kc-realmstats-total">—</span>
         <span id="kc-realmstats-phase" class="kc-phase-badge kc-phase-normal" style="display:none"></span>
       </div>
       <div id="kc-realmstats-controls">
-        <input type="text" id="kc-realmstats-search" placeholder="Rechercher un bâtiment..." />
+        <input type="text" id="kc-realmstats-search" placeholder="${t('realmStats.searchPlaceholder')}" />
         <select id="kc-realmstats-sort">
-          <option value="count_desc">Les plus construits</option>
-          <option value="count_asc">Les moins construits</option>
-          <option value="name_asc">Nom A→Z</option>
-          <option value="name_desc">Nom Z→A</option>
+          <option value="count_desc">${t('realmStats.sortCountDesc')}</option>
+          <option value="count_asc">${t('realmStats.sortCountAsc')}</option>
+          <option value="name_asc">${t('realmStats.sortNameAsc')}</option>
+          <option value="name_desc">${t('realmStats.sortNameDesc')}</option>
         </select>
       </div>
       <div id="kc-realmstats-list">
-        <p id="kc-realmstats-empty">Ouvre ce panneau pour charger les statistiques.</p>
+        <p id="kc-realmstats-empty">${t('realmStats.openToLoad')}</p>
       </div>
       <div id="kc-realmstats-footer">
-        <button id="kc-realmstats-refresh" type="button">Actualiser</button>
-        <button id="kc-realmstats-close" type="button">Fermer</button>
+        <button id="kc-realmstats-refresh" type="button">${t('common.refresh')}</button>
+        <button id="kc-realmstats-close" type="button">${t('common.close')}</button>
       </div>
     `;
     document.body.appendChild(panel);
@@ -3012,12 +3468,13 @@
   function renderSeasonCard(season) {
     const realmId = currentRealmId == null ? 0 : currentRealmId;
     const url = `https://www.simcompanies.com/fr/encyclopedia/${realmId}/${season.slug}/${season.key}/`;
+    const dates = season.datesKey ? t(season.datesKey) : '';
     return `
       <a class="kc-season-card" href="${url}" target="_blank" rel="noopener noreferrer">
         <span class="kc-season-emoji">${season.emoji}</span>
         <div class="kc-season-info">
-          <span class="kc-season-name">${season.name}</span>
-          ${season.dates ? `<span class="kc-season-dates">${season.dates}</span>` : ''}
+          <span class="kc-season-name">${t(season.nameKey)}</span>
+          ${dates ? `<span class="kc-season-dates">${dates}</span>` : ''}
         </div>
       </a>
     `;
@@ -3028,15 +3485,15 @@
     panel.id = 'kc-seasons-panel';
     panel.setAttribute('role', 'status');
     panel.innerHTML = `
-      <span id="kc-seasons-status">Karmine Tool — Saisons</span>
+      <span id="kc-seasons-status">Karmine Tool — ${t('seasons.title')}</span>
       <div id="kc-seasons-body">
-        <p class="kc-seasons-group-title">Production</p>
+        <p class="kc-seasons-group-title">${t('seasons.production')}</p>
         ${SEASONS_DATA.production.map(renderSeasonCard).join('')}
-        <p class="kc-seasons-group-title">Vente</p>
+        <p class="kc-seasons-group-title">${t('seasons.retail')}</p>
         ${SEASONS_DATA.retail.map(renderSeasonCard).join('')}
       </div>
       <div id="kc-seasons-footer">
-        <button id="kc-seasons-close" type="button">Fermer</button>
+        <button id="kc-seasons-close" type="button">${t('common.close')}</button>
       </div>
     `;
     document.body.appendChild(panel);
@@ -3049,7 +3506,7 @@
     return `
       <a class="kc-moderator-row" href="${mod.url}" target="_blank" rel="noopener noreferrer">
         <span class="kc-moderator-name">${mod.name}</span>
-        <span class="kc-moderator-sub">Voir le profil en jeu</span>
+        <span class="kc-moderator-sub">${t('moderators.viewProfile')}</span>
       </a>
     `;
   }
@@ -3059,12 +3516,12 @@
     panel.id = 'kc-moderators-panel';
     panel.setAttribute('role', 'status');
     panel.innerHTML = `
-      <span id="kc-moderators-status">Karmine Tool — Modérateurs FR</span>
+      <span id="kc-moderators-status">Karmine Tool — ${t('moderators.title')}</span>
       <div id="kc-moderators-body">
         ${MODERATORS_DATA.map(renderModeratorRow).join('')}
       </div>
       <div id="kc-moderators-footer">
-        <button id="kc-moderators-close" type="button">Fermer</button>
+        <button id="kc-moderators-close" type="button">${t('common.close')}</button>
       </div>
     `;
     document.body.appendChild(panel);
@@ -3087,12 +3544,12 @@
     panel.id = 'kc-externaltools-panel';
     panel.setAttribute('role', 'status');
     panel.innerHTML = `
-      <span id="kc-externaltools-status">Karmine Tool — Outils externes</span>
+      <span id="kc-externaltools-status">Karmine Tool — ${t('externalTools.title')}</span>
       <div id="kc-externaltools-body">
         ${EXTERNAL_TOOLS_DATA.map(renderExternalToolRow).join('')}
       </div>
       <div id="kc-externaltools-footer">
-        <button id="kc-externaltools-close" type="button">Fermer</button>
+        <button id="kc-externaltools-close" type="button">${t('common.close')}</button>
       </div>
     `;
     document.body.appendChild(panel);
@@ -3130,7 +3587,7 @@
     btn.id = 'kc-xp-toggle';
     btn.type = 'button';
     btn.textContent = 'XP';
-    btn.setAttribute('aria-label', 'Ouvrir le calculateur XP');
+    btn.setAttribute('aria-label', t('xp.openAria'));
     btn.setAttribute('aria-expanded', 'false');
     document.body.appendChild(btn);
 
@@ -3182,7 +3639,7 @@
     btn.id = 'kc-menu-btn';
     btn.type = 'button';
     btn.innerHTML = '<span id="kc-menu-arrow">▾</span>';
-    btn.setAttribute('aria-label', 'Ouvrir le menu Karmine Tool');
+    btn.setAttribute('aria-label', t('menu.openAria'));
     btn.setAttribute('aria-expanded', 'false');
 
     const panel = document.createElement('div');
@@ -3193,7 +3650,7 @@
     `;
 
     const list = panel.querySelector('#kc-menu-list');
-    MENU_ITEMS.forEach((item) => {
+    getMenuItems().forEach((item) => {
       const li = document.createElement('li');
       li.textContent = item.label;
       li.addEventListener('click', () => item.onSelect());
@@ -3222,6 +3679,45 @@
     if (e.key === 'Escape') closeAllPanels();
   });
 
+  // Un changement de langue en cours de session doit se refléter partout :
+  // plus simple et plus fiable de retirer tous les panneaux et de les
+  // reconstruire à neuf (comme on le fait déjà pour l'import de réglages)
+  // que de mettre à jour chaque texte affiché un par un.
+  function rebuildAllPanelsForLanguageChange() {
+    ['kc-menu-btn', 'kc-menu-panel', 'kc-xp-panel', 'kc-xp-toggle', 'kc-moderators-panel', 'kc-events-panel', 'kc-options-panel', 'kc-customization-panel', 'kc-realmstats-panel', 'kc-seasons-panel', 'kc-prices-panel', 'kc-externaltools-panel'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.remove();
+    });
+
+    createMenu();
+    createXpPanel();
+    createXpToggleButton();
+    createModeratorsPanel();
+    createEventsPanel();
+    createOptionsPanel();
+    createCustomizationPanel();
+    createRealmStatsPanel();
+    createSeasonsPanel();
+    createPricesPanel();
+    createExternalToolsPanel();
+
+    // Rouvre le panneau Options (c'est de là que vient le changement de
+    // langue) pour que le résultat soit visible immédiatement.
+    openPanel('kc-options-panel');
+
+    // Redessine les données déjà chargées dans la nouvelle langue plutôt
+    // que de forcer un nouvel appel réseau pour rien.
+    if (lastFetchedEvents.length > 0) renderEventsPanel(lastFetchedEvents, lastResourceNames);
+    if (pricesState.items.length > 0) renderPricesList();
+    if (realmStatsState.buildings.length > 0) {
+      renderRealmStatsSummary();
+      renderRealmStatsList();
+    }
+    refreshXpData();
+  }
+
+  currentLanguage = loadSettings().language || 'fr';
+
   injectStyle();
   createMenu();
   createXpPanel();
@@ -3233,6 +3729,7 @@
   applyColorFilter();
   applyChatColors();
   applyCustomBackground();
+  applyMapOverlayVisibility();
   createRealmStatsPanel();
   createSeasonsPanel();
   createPricesPanel();
