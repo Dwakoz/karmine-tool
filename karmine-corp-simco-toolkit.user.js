@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Karmine Tool (bêta)
 // @namespace    https://github.com/Dwakoz
-// @version      1.22.0
+// @version      1.22.1
 // @description  Extension communautaire pour Sim Companies, développée par le joueur Karmine Corp. Calculateur XP, modérateurs FR et plus à venir.
 // @author       Karmine Corp
 // @match        https://www.simcompanies.com/*
@@ -747,6 +747,9 @@
   const EXTERNAL_TOOLS_DATA = [
     { name: 'SimcoTools', url: 'https://simcotools.com/fr/' },
     { name: 'Cooper Inc', url: 'https://cooperinc.xyz/' },
+    { name: 'Simcolike', url: 'https://simcolike.online/' },
+    { name: 'SimcoGuides', url: 'https://simcoguides.online/' },
+    { name: 'SC Dibbleganger', url: 'https://sc.dibbleganger.com/' },
   ];
 
   const STYLE = `
