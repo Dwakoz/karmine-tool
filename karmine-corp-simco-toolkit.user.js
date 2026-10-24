@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Karmine Tool (bêta)
 // @namespace    https://github.com/Dwakoz
-// @version      1.22.1
+// @version      1.23.0
 // @description  Extension communautaire pour Sim Companies, développée par le joueur Karmine Corp. Calculateur XP, modérateurs FR et plus à venir.
 // @author       Karmine Corp
 // @match        https://www.simcompanies.com/*
@@ -10,6 +10,7 @@
 // @updateURL    https://github.com/Dwakoz/karmine-tool/raw/refs/heads/main/karmine-corp-simco-toolkit.user.js
 // @downloadURL  https://github.com/Dwakoz/karmine-tool/raw/refs/heads/main/karmine-corp-simco-toolkit.user.js
 // @grant        GM_xmlhttpRequest
+// @grant        GM_info
 // @connect      api.simcotools.com
 // @run-at       document-idle
 // ==/UserScript==
@@ -19,6 +20,12 @@
 
   if (window.__kcSimcoToolkitLoaded) return;
   window.__kcSimcoToolkitLoaded = true;
+
+  // Lu depuis l'en-tête @version du script (via GM_info) plutôt que
+  // dupliqué en dur ici — une seule source de vérité pour le numéro de
+  // version, utilisée par le changelog intégré.
+  const CURRENT_SCRIPT_VERSION =
+    (typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) || null;
 
   // Rempli après le premier appel réussi à auth-data (voir refreshXpData) et
   // réutilisé par tous les modules ayant besoin du realm — jamais redemandé
@@ -42,6 +49,14 @@
         onSelect: () => {
           openPanel('kc-events-panel');
           refreshMarketEvents();
+        },
+      },
+      {
+        id: 'buildings',
+        label: t('menu.buildings'),
+        onSelect: () => {
+          openPanel('kc-buildings-panel');
+          refreshBuildingsPanel();
         },
       },
       {
@@ -137,6 +152,7 @@
     mentionLinkColor: '#58A8CF',
     mentionLinkColorAlpha: 100,
     hideBuildingOverlay: false,
+    notifyBuildingsEnabled: false,
   };
 
   function loadSettings() {
@@ -172,6 +188,7 @@
       'xp.openAria': 'Ouvrir le calculateur XP',
       'menu.moderators': 'Modérateurs',
       'menu.events': 'Événements',
+      'menu.buildings': 'Bâtiments',
       'menu.realmStats': 'Statistiques du royaume',
       'menu.seasons': 'Saisons',
       'menu.prices': 'Prix du marché',
@@ -259,8 +276,32 @@
       'options.restaurants': 'Je possède des restaurants',
       'options.restaurantsHint':
         'Active certains détails spécifiques aux restaurants (ex. le tag "Ingrédient restaurant" dans les Événements). Désactivé, ces détails restent masqués — utile si tu joues un autre type de business.',
+      'options.notifyBuildings': 'Notifications bâtiments',
+      'options.notifyBuildingsHint':
+        "Affiche une notification du navigateur quand une construction/amélioration ou une production se termine. Nécessite d'autoriser les notifications pour ce site, et de garder cet onglet ouvert.",
       'options.language': 'Langue de l\'outil',
       'options.languageHint': "Change la langue de l'interface de Karmine Tool (pas celle du jeu lui-même).",
+      'alert.notifPermissionDenied':
+        'Les notifications sont bloquées pour ce site dans ton navigateur. Autorise-les dans les réglages du site pour activer cette option.',
+      'notif.constructionDone': '{name} a terminé sa construction/amélioration !',
+      'notif.productionReady': '{name} a terminé sa production !',
+      'changelog.title': 'Nouveautés de cette version',
+      'buildings.title': 'Bâtiments',
+      'buildings.openToLoad': 'Ouvre ce panneau depuis la page Carte pour voir tes bâtiments.',
+      'buildings.none': 'Aucun bâtiment détecté. Ouvre ce panneau depuis la page Carte.',
+      'buildings.noMatch': 'Aucun bâtiment ne correspond à cette recherche.',
+      'buildings.searchPlaceholder': 'Rechercher un bâtiment…',
+      'buildings.sortRemainingAsc': 'Temps restant (croissant)',
+      'buildings.sortRemainingDesc': 'Temps restant (décroissant)',
+      'buildings.sortNameAsc': 'Nom (A → Z)',
+      'buildings.sortNameDesc': 'Nom (Z → A)',
+      'buildings.statusActive': 'Actif',
+      'buildings.statusConstruction': 'Construction',
+      'buildings.statusRecreational': 'Récréatif',
+      'buildings.remaining': '{duration} restant',
+      'buildings.noTimer': 'Pas de minuteur',
+      'xp.historyTitle': 'Historique (12h)',
+      'xp.historyEmpty': 'Pas encore assez de données — reviens dans quelques minutes.',
       'customization.title': 'Personnalisation',
       'customization.export': 'Exporter mes réglages',
       'customization.import': 'Importer mes réglages',
@@ -317,6 +358,7 @@
       'xp.openAria': 'Open the XP calculator',
       'menu.moderators': 'Moderators',
       'menu.events': 'Events',
+      'menu.buildings': 'Buildings',
       'menu.realmStats': 'Realm statistics',
       'menu.seasons': 'Seasons',
       'menu.prices': 'Market prices',
@@ -404,8 +446,32 @@
       'options.restaurants': 'I own restaurants',
       'options.restaurantsHint':
         'Enables restaurant-specific details (e.g. the "Restaurant ingredient" tag in Events). When disabled, these details stay hidden — useful if you play another type of business.',
+      'options.notifyBuildings': 'Building notifications',
+      'options.notifyBuildingsHint':
+        'Shows a browser notification when a construction/upgrade or a production run finishes. Requires allowing notifications for this site, and keeping this tab open.',
       'options.language': 'Tool language',
       'options.languageHint': "Changes the Karmine Tool interface language (not the game's own language).",
+      'alert.notifPermissionDenied':
+        'Notifications are blocked for this site in your browser. Allow them in the site settings to enable this option.',
+      'notif.constructionDone': '{name} finished its construction/upgrade!',
+      'notif.productionReady': '{name} finished its production!',
+      'changelog.title': "What's new in this version",
+      'buildings.title': 'Buildings',
+      'buildings.openToLoad': 'Open this panel from the Map page to see your buildings.',
+      'buildings.none': 'No building detected. Open this panel from the Map page.',
+      'buildings.noMatch': 'No building matches this search.',
+      'buildings.searchPlaceholder': 'Search a building…',
+      'buildings.sortRemainingAsc': 'Time left (ascending)',
+      'buildings.sortRemainingDesc': 'Time left (descending)',
+      'buildings.sortNameAsc': 'Name (A → Z)',
+      'buildings.sortNameDesc': 'Name (Z → A)',
+      'buildings.statusActive': 'Active',
+      'buildings.statusConstruction': 'Construction',
+      'buildings.statusRecreational': 'Recreational',
+      'buildings.remaining': '{duration} left',
+      'buildings.noTimer': 'No timer',
+      'xp.historyTitle': 'History (12h)',
+      'xp.historyEmpty': 'Not enough data yet — check back in a few minutes.',
       'customization.title': 'Customization',
       'customization.export': 'Export my settings',
       'customization.import': 'Import my settings',
@@ -1003,6 +1069,27 @@
       font-size: 11px;
       color: #9FB0C3;
       font-style: italic;
+    }
+    #kc-xp-history {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid #1B2436;
+    }
+    #kc-xp-history-label {
+      margin: 0 0 6px;
+      font-size: 11px;
+      color: #9FB0C3;
+    }
+    #kc-xp-sparkline {
+      display: block;
+      width: 100%;
+      height: 40px;
+    }
+    #kc-xp-history-empty {
+      margin: 0;
+      font-size: 11px;
+      color: #9FB0C3;
+      display: none;
     }
     #kc-xp-recreational:not(:empty) {
       margin-top: 10px;
@@ -1975,8 +2062,138 @@
       outline: 2px solid #E8A33D;
       outline-offset: 2px;
     }
+    #kc-buildings-panel {
+      position: fixed;
+      top: 108px;
+      right: 16px;
+      width: 320px;
+      max-width: calc(100vw - 48px);
+      max-height: 75vh;
+      overflow-y: auto;
+      background: #10151F;
+      color: #EDE6D8;
+      border-left: 4px solid #E8A33D;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      z-index: 2147483000;
+      transform-origin: top right;
+      transform: scale(0.96);
+      opacity: 0;
+      pointer-events: none;
+      transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.18s ease;
+    }
+    #kc-buildings-panel.kc-open {
+      transform: scale(1);
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #kc-buildings-status {
+      display: block;
+      padding: 8px 16px;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 11px;
+      letter-spacing: 0.02em;
+      color: #9FB0C3;
+      background: #1B2436;
+      border-bottom: 1px solid #3E7C74;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+    #kc-buildings-controls {
+      display: flex;
+      gap: 8px;
+      padding: 12px 16px;
+    }
+    #kc-buildings-search {
+      flex: 1;
+      background: #1B2436;
+      border: 1px solid #3E7C74;
+      color: #EDE6D8;
+      font-size: 12px;
+      padding: 5px 8px;
+    }
+    #kc-buildings-sort {
+      background: #1B2436;
+      border: 1px solid #3E7C74;
+      color: #EDE6D8;
+      font-size: 12px;
+      padding: 5px 4px;
+    }
+    #kc-buildings-list {
+      padding: 0 16px 16px;
+    }
+    .kc-building-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 0;
+      border-bottom: 1px solid #1B2436;
+      text-decoration: none;
+      color: inherit;
+    }
+    .kc-building-row:last-child {
+      border-bottom: none;
+    }
+    .kc-building-name {
+      flex: 1;
+      font-size: 12px;
+      color: #EDE6D8;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .kc-building-remaining {
+      font-size: 11px;
+      color: #9FB0C3;
+      white-space: nowrap;
+    }
+    .kc-phase-recreational {
+      color: #58A8CF;
+      background: rgba(88, 168, 207, 0.15);
+    }
+    #kc-buildings-empty {
+      padding: 16px;
+      font-size: 12px;
+      color: #9FB0C3;
+    }
+    #kc-buildings-footer {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 16px 16px;
+    }
+    #kc-buildings-refresh,
+    #kc-buildings-close {
+      appearance: none;
+      border: 1px solid #3E7C74;
+      background: transparent;
+      color: #EDE6D8;
+      font-size: 12px;
+      padding: 6px 14px;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+    #kc-buildings-refresh:hover,
+    #kc-buildings-close:hover {
+      background: #1B2436;
+    }
+    #kc-buildings-refresh:focus-visible,
+    #kc-buildings-close:focus-visible {
+      outline: 2px solid #E8A33D;
+      outline-offset: 2px;
+    }
+    #kc-toast-list {
+      margin: 8px 0 0;
+      padding-left: 18px;
+      font-size: 13px;
+      line-height: 1.5;
+      color: #C7D0DB;
+    }
+    #kc-toast-list li {
+      margin-bottom: 4px;
+    }
     @media (prefers-reduced-motion: reduce) {
-      #kc-toast, #kc-menu-panel, #kc-xp-panel, #kc-moderators-panel, #kc-events-panel, #kc-options-panel, #kc-customization-panel, #kc-realmstats-panel, #kc-seasons-panel, #kc-prices-panel, #kc-externaltools-panel {
+      #kc-toast, #kc-menu-panel, #kc-xp-panel, #kc-moderators-panel, #kc-events-panel, #kc-options-panel, #kc-customization-panel, #kc-realmstats-panel, #kc-seasons-panel, #kc-prices-panel, #kc-externaltools-panel, #kc-buildings-panel {
         transition: opacity 0.3s ease;
         transform: none;
       }
@@ -2051,6 +2268,80 @@
     });
   }
 
+  // --- Changelog intégré ---
+  //
+  // À chaque mise à jour (numéro de @version différent de celui déjà vu),
+  // un petit encart liste les nouveautés — pour éviter les retours "ça a
+  // changé, je comprends pas pourquoi". Une entrée par version, à
+  // compléter à la main à chaque release ; une version sans entrée ne
+  // déclenche simplement rien.
+  const CHANGELOG_SHOWN_KEY = 'kc_changelog_shown_version_v1';
+  const CHANGELOG = {
+    '1.23.0': {
+      fr: [
+        'Nouveau panneau "Bâtiments" : vue d\'ensemble triable de tous les bâtiments de la carte (statut, temps restant).',
+        'Notifications du navigateur quand une construction/amélioration ou une production se termine (à activer dans Options).',
+        'Petit graphique de progression XP sur les 12 dernières heures, dans le calculateur XP.',
+        '3 nouveaux outils externes : Simcolike, SimcoGuides, SC Dibbleganger.',
+      ],
+      en: [
+        'New "Buildings" panel: sortable overview of every building on the map (status, time left).',
+        'Browser notifications when a construction/upgrade or a production run finishes (enable it in Options).',
+        'Small XP progress graph over the last 12 hours, in the XP calculator.',
+        '3 new external tools: Simcolike, SimcoGuides, SC Dibbleganger.',
+      ],
+    },
+  };
+
+  function showChangelogToast(version, entries) {
+    const existing = document.getElementById('kc-toast');
+    if (existing) existing.remove();
+
+    const toast = document.createElement('div');
+    toast.id = 'kc-toast';
+    toast.setAttribute('role', 'status');
+    toast.innerHTML = `
+      <span id="kc-toast-status">Karmine Tool — v${version}</span>
+      <div id="kc-toast-body">
+        <p id="kc-toast-title">${t('changelog.title')}</p>
+        <ul id="kc-toast-list">
+          ${entries.map((entry) => `<li>${entry}</li>`).join('')}
+        </ul>
+      </div>
+      <div id="kc-toast-footer">
+        <button id="kc-toast-close" type="button">${t('common.close')}</button>
+      </div>
+    `;
+    document.body.appendChild(toast);
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => toast.classList.add('kc-visible'));
+    });
+
+    document.getElementById('kc-toast-close').addEventListener('click', () => {
+      toast.classList.remove('kc-visible');
+      setTimeout(() => toast.remove(), 500);
+    });
+  }
+
+  function maybeShowChangelog() {
+    if (!CURRENT_SCRIPT_VERSION || !CHANGELOG[CURRENT_SCRIPT_VERSION]) return;
+    let lastShown = null;
+    try {
+      lastShown = localStorage.getItem(CHANGELOG_SHOWN_KEY);
+    } catch (err) {
+      // stockage indisponible : on affichera simplement à chaque démarrage, sans gravité
+    }
+    if (lastShown === CURRENT_SCRIPT_VERSION) return;
+    const entries = CHANGELOG[CURRENT_SCRIPT_VERSION][currentLanguage] || CHANGELOG[CURRENT_SCRIPT_VERSION].fr || [];
+    if (entries.length > 0) showChangelogToast(CURRENT_SCRIPT_VERSION, entries);
+    try {
+      localStorage.setItem(CHANGELOG_SHOWN_KEY, CURRENT_SCRIPT_VERSION);
+    } catch (err) {
+      // stockage indisponible : le changelog pourra réapparaître, sans gravité
+    }
+  }
+
   // --- Calculateur XP ---
   //
   // Principe : on interroge périodiquement l'API auth-data pour relever
@@ -2104,6 +2395,57 @@
     const deltaXp = last.xp - first.xp;
     if (deltaXp <= 0) return null;
     return deltaXp / (elapsedMs / 3_600_000);
+  }
+
+  // Petit graphique (sparkline) de la progression d'XP sur la fenêtre de
+  // 12h déjà collectée par recordXpSample(). Dessin canvas simple, sans
+  // dépendance externe — juste une ligne reliant chaque relevé.
+  function renderXpSparkline(samples) {
+    const canvas = document.getElementById('kc-xp-sparkline');
+    const emptyEl = document.getElementById('kc-xp-history-empty');
+    if (!canvas) return;
+    if (!samples || samples.length < 2) {
+      canvas.style.display = 'none';
+      if (emptyEl) emptyEl.style.display = '';
+      return;
+    }
+    canvas.style.display = '';
+    if (emptyEl) emptyEl.style.display = 'none';
+
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width;
+    const h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    const xs = samples.map((s) => s.t);
+    const ys = samples.map((s) => s.xp);
+    const minT = Math.min(...xs);
+    const maxT = Math.max(...xs);
+    const minXp = Math.min(...ys);
+    const maxXp = Math.max(...ys);
+    const spanT = Math.max(1, maxT - minT);
+    const spanXp = Math.max(1, maxXp - minXp);
+    const padding = 3;
+
+    const points = samples.map((s) => ({
+      x: padding + ((s.t - minT) / spanT) * (w - padding * 2),
+      // XP croissant vers le haut : on inverse l'axe Y du canvas (0 en haut)
+      y: h - padding - ((s.xp - minXp) / spanXp) * (h - padding * 2),
+    }));
+
+    ctx.beginPath();
+    points.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+    ctx.strokeStyle = '#E8A33D';
+    ctx.lineWidth = 1.5;
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+
+    // Zone remplie sous la courbe, légère, pour mieux lire la tendance
+    ctx.lineTo(points[points.length - 1].x, h - padding);
+    ctx.lineTo(points[0].x, h - padding);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(232, 163, 61, 0.12)';
+    ctx.fill();
   }
 
   function formatDuration(hours) {
@@ -2464,6 +2806,57 @@
     }
   }
 
+  // --- Lecture partagée des bâtiments de la carte (dashboard + notifs) ---
+  //
+  // Même format d'aria-label que celui utilisé par computeInstantXpRate()
+  // ("Nom: Statut, Xh, Ymin" ou "Nom: Statut, Xj, Yh" pour les récréatifs),
+  // mais extrait ici dans une fonction à part pour ne pas risquer de casser
+  // le calculateur XP existant — les deux lisent le même DOM en parallèle,
+  // chacun de son côté.
+  function parseBuildingAriaLabel(label) {
+    if (!label) return null;
+    const nameMatch = label.match(/^([^:]+):/);
+    const name = nameMatch ? nameMatch[1].trim() : '';
+    let status = null;
+    if (/entretien/i.test(label)) status = 'recreational';
+    else if (/am[ée]lioration/i.test(label)) status = 'construction';
+    else if (/ouvert/i.test(label)) status = 'active';
+    if (!status) return { name, status: null, remainingMs: null };
+
+    // Même format "Xh, Ymin" pour tous les statuts, y compris récréatif
+    // (ex. "Temple: Entretien, 118h, 54min" — 118h = les ~7 jours du cycle
+    // d'entretien, affichés en heures comme les autres, pas en jours).
+    let remainingMs = null;
+    const hoursMatch = label.match(/(\d+)\s*h,?\s*(\d+)\s*min/i);
+    if (hoursMatch) {
+      remainingMs = (parseInt(hoursMatch[1], 10) * 60 + parseInt(hoursMatch[2], 10)) * 60_000;
+    }
+    return { name, status, remainingMs };
+  }
+
+  // Vue d'ensemble de tous les bâtiments visibles sur la carte — utilisée
+  // par le panneau "Bâtiments" et par les notifications de fin de
+  // construction/production. Retourne null si on n'est pas sur la carte.
+  function computeBuildingOverview() {
+    const containers = Array.from(document.querySelectorAll('[class*="test-building"]'));
+    if (containers.length === 0) return null;
+
+    return containers
+      .map((container) => {
+        const labeledEl = container.querySelector('[aria-label]');
+        const parsed = parseBuildingAriaLabel(labeledEl ? labeledEl.getAttribute('aria-label') : null);
+        if (!parsed || !parsed.status) return null;
+        const id = container.getAttribute('href') || null;
+        return {
+          id,
+          name: parsed.name || '—',
+          status: parsed.status,
+          remainingMs: parsed.remainingMs,
+        };
+      })
+      .filter(Boolean);
+  }
+
   function computeInstantXpRate() {
     // Chaque bâtiment porte un aria-label explicite et fiable, peu importe
     // le type de commerce (restaurant, magasin électronique, etc.) :
@@ -2514,6 +2907,77 @@
     return { activeCount, constructionCount, recreationalCount, recreationalBuildings, xpPerHour };
   }
 
+  // --- Notifications navigateur : construction/production terminée ---
+  //
+  // Principe : à chaque lecture de la carte, on estime l'horodatage de fin
+  // de chaque bâtiment (maintenant + temps restant lu sur son aria-label).
+  // Si ce bâtiment change de statut ou que son horodatage de fin recule
+  // franchement (nouveau cycle), on réarme la notification pour lui. Dès
+  // que le temps restant estimé tombe sous une minute, on notifie une
+  // seule fois. Ne dépend d'aucun minuteur "réel" côté serveur — juste de
+  // ce qui est déjà affiché sur la carte, donc aucun risque anti-triche.
+  const BUILDING_NOTIFY_KEY = 'kc_building_notify_v1';
+  const BUILDING_NOTIFY_THRESHOLD_MS = 60_000;
+  const BUILDING_NOTIFY_MAX_AGE_MS = 24 * 60 * 60 * 1000; // purge des entrées trop anciennes (bâtiment démoli, etc.)
+
+  function loadBuildingNotifyState() {
+    try {
+      const raw = localStorage.getItem(BUILDING_NOTIFY_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch (err) {
+      return {};
+    }
+  }
+
+  function saveBuildingNotifyState(state) {
+    try {
+      localStorage.setItem(BUILDING_NOTIFY_KEY, JSON.stringify(state));
+    } catch (err) {
+      // stockage indisponible : les notifications pourront se répéter, sans gravité
+    }
+  }
+
+  function notifyBuildingFinished(building) {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    const key = building.status === 'construction' ? 'notif.constructionDone' : 'notif.productionReady';
+    try {
+      new Notification('Karmine Tool', {
+        body: t(key, { name: building.name }),
+        icon: 'https://www.simcompanies.com/favicon.ico',
+        tag: `kc-building-${building.id || building.name}`,
+      });
+    } catch (err) {
+      // Notification bloquée ou indisponible dans ce contexte : on l'ignore silencieusement
+    }
+  }
+
+  function checkBuildingNotifications(buildings) {
+    const now = Date.now();
+    const state = loadBuildingNotifyState();
+    buildings.forEach((b) => {
+      // Seuls actif/construction correspondent à un "temps restant" pertinent
+      // pour une notification ; les récréatifs (cycle de 7 jours) sont exclus.
+      if (!b.id || b.remainingMs == null || (b.status !== 'active' && b.status !== 'construction')) return;
+      const newFinishAt = now + b.remainingMs;
+      const existing = state[b.id];
+      if (!existing || existing.status !== b.status || newFinishAt > existing.finishAt + 2 * 60 * 1000) {
+        state[b.id] = { finishAt: newFinishAt, notified: false, status: b.status, at: now };
+      } else {
+        state[b.id].finishAt = newFinishAt;
+        state[b.id].at = now;
+      }
+      if (!state[b.id].notified && b.remainingMs <= BUILDING_NOTIFY_THRESHOLD_MS) {
+        notifyBuildingFinished(b);
+        state[b.id].notified = true;
+      }
+    });
+    // Purge des entrées trop anciennes (bâtiment vendu/démoli, plus revu depuis longtemps)
+    Object.keys(state).forEach((id) => {
+      if (now - (state[id].at || 0) > BUILDING_NOTIFY_MAX_AGE_MS) delete state[id];
+    });
+    saveBuildingNotifyState(state);
+  }
+
   const LAST_INSTANT_ESTIMATE_KEY = 'kc_last_instant_estimate_v1';
   const LAST_INSTANT_ESTIMATE_MAX_AGE_MS = 3 * 60 * 60 * 1000; // au-delà de 3h, trop périmé pour être affiché
 
@@ -2546,6 +3010,7 @@
       .then((data) => {
         currentRealmId = data.authCompany.realmId; // réutilisé par le module VWAP, jamais redemandé
         const samples = recordXpSample(data.levelInfo);
+        renderXpSparkline(samples);
         const instant = computeInstantXpRate();
         if (instant) {
           saveLastInstantEstimate(instant);
@@ -2684,6 +3149,11 @@
         <p id="kc-xp-progress-text">${t('xp.progressPlaceholder')}</p>
         <p id="kc-xp-rate">${t('xp.ratePlaceholder')}</p>
         <p id="kc-xp-eta">${t('xp.etaPlaceholder')}</p>
+        <div id="kc-xp-history">
+          <p id="kc-xp-history-label">${t('xp.historyTitle')}</p>
+          <canvas id="kc-xp-sparkline" width="268" height="40"></canvas>
+          <p id="kc-xp-history-empty">${t('xp.historyEmpty')}</p>
+        </div>
         <div id="kc-xp-recreational"></div>
       </div>
       <div id="kc-xp-footer">
@@ -2695,6 +3165,124 @@
 
     panel.querySelector('#kc-xp-refresh').addEventListener('click', () => refreshXpData());
     panel.querySelector('#kc-xp-close').addEventListener('click', () => closeAllPanels());
+  }
+
+  // --- Mini-dashboard des bâtiments de la carte ---
+  //
+  // Vue d'ensemble triable/filtrable, construite sur computeBuildingOverview()
+  // (même lecture DOM que les notifications). Aucun appel réseau — juste ce
+  // qui est déjà affiché sur la carte.
+  const buildingsState = { buildings: [], search: '', sort: 'remaining_asc' };
+
+  function formatBuildingRemaining(ms) {
+    if (ms == null) return t('buildings.noTimer');
+    const totalMinutes = Math.round(ms / 60000);
+    const days = Math.floor(totalMinutes / 1440);
+    const hrs = Math.floor((totalMinutes % 1440) / 60);
+    const mins = totalMinutes % 60;
+    const parts = [];
+    if (days > 0) parts.push(`${days}j`);
+    if (days > 0 || hrs > 0) parts.push(`${hrs}h`);
+    parts.push(`${mins}m`);
+    return t('buildings.remaining', { duration: parts.join(' ') });
+  }
+
+  const BUILDING_STATUS_LABELS_KEY = {
+    active: 'buildings.statusActive',
+    construction: 'buildings.statusConstruction',
+    recreational: 'buildings.statusRecreational',
+  };
+  const BUILDING_STATUS_BADGE_CLASS = {
+    active: 'kc-phase-boom',
+    construction: 'kc-phase-normal',
+    recreational: 'kc-phase-recreational',
+  };
+
+  function renderBuildingsList() {
+    const list = document.getElementById('kc-buildings-list');
+    if (!list) return;
+    if (buildingsState.buildings.length === 0) {
+      list.innerHTML = `<p id="kc-buildings-empty">${t('buildings.none')}</p>`;
+      return;
+    }
+    const search = buildingsState.search.trim().toLowerCase();
+    let items = buildingsState.buildings.filter((b) => b.name.toLowerCase().includes(search));
+
+    const sorters = {
+      remaining_asc: (a, b) => (a.remainingMs ?? Infinity) - (b.remainingMs ?? Infinity),
+      remaining_desc: (a, b) => (b.remainingMs ?? -Infinity) - (a.remainingMs ?? -Infinity),
+      name_asc: (a, b) => a.name.localeCompare(b.name),
+      name_desc: (a, b) => b.name.localeCompare(a.name),
+    };
+    items = items.slice().sort(sorters[buildingsState.sort] || sorters.remaining_asc);
+
+    if (items.length === 0) {
+      list.innerHTML = `<p id="kc-buildings-empty">${t('buildings.noMatch')}</p>`;
+      return;
+    }
+    list.innerHTML = items
+      .map((b) => {
+        const statusKey = BUILDING_STATUS_LABELS_KEY[b.status];
+        const badgeClass = BUILDING_STATUS_BADGE_CLASS[b.status] || 'kc-phase-normal';
+        const inner = `
+          <span class="kc-building-name">${escapeHtml(b.name)}</span>
+          <span class="kc-phase-badge ${badgeClass}">${statusKey ? t(statusKey) : ''}</span>
+          <span class="kc-building-remaining">${formatBuildingRemaining(b.remainingMs)}</span>
+        `;
+        return b.id
+          ? `<a class="kc-building-row" href="${escapeHtml(b.id)}" target="_blank" rel="noopener noreferrer">${inner}</a>`
+          : `<div class="kc-building-row">${inner}</div>`;
+      })
+      .join('');
+  }
+
+  function refreshBuildingsPanel() {
+    const overview = computeBuildingOverview();
+    const list = document.getElementById('kc-buildings-list');
+    if (!overview) {
+      buildingsState.buildings = [];
+      if (list) list.innerHTML = `<p id="kc-buildings-empty">${t('buildings.openToLoad')}</p>`;
+      return;
+    }
+    buildingsState.buildings = overview;
+    renderBuildingsList();
+  }
+
+  function createBuildingsPanel() {
+    const panel = document.createElement('div');
+    panel.id = 'kc-buildings-panel';
+    panel.setAttribute('role', 'status');
+    panel.innerHTML = `
+      <span id="kc-buildings-status">Karmine Tool — ${t('buildings.title')}</span>
+      <div id="kc-buildings-controls">
+        <input type="text" id="kc-buildings-search" placeholder="${t('buildings.searchPlaceholder')}" />
+        <select id="kc-buildings-sort">
+          <option value="remaining_asc">${t('buildings.sortRemainingAsc')}</option>
+          <option value="remaining_desc">${t('buildings.sortRemainingDesc')}</option>
+          <option value="name_asc">${t('buildings.sortNameAsc')}</option>
+          <option value="name_desc">${t('buildings.sortNameDesc')}</option>
+        </select>
+      </div>
+      <div id="kc-buildings-list">
+        <p id="kc-buildings-empty">${t('buildings.openToLoad')}</p>
+      </div>
+      <div id="kc-buildings-footer">
+        <button id="kc-buildings-refresh" type="button">${t('common.refresh')}</button>
+        <button id="kc-buildings-close" type="button">${t('common.close')}</button>
+      </div>
+    `;
+    document.body.appendChild(panel);
+
+    panel.querySelector('#kc-buildings-search').addEventListener('input', (e) => {
+      buildingsState.search = e.target.value;
+      renderBuildingsList();
+    });
+    panel.querySelector('#kc-buildings-sort').addEventListener('change', (e) => {
+      buildingsState.sort = e.target.value;
+      renderBuildingsList();
+    });
+    panel.querySelector('#kc-buildings-refresh').addEventListener('click', () => refreshBuildingsPanel());
+    panel.querySelector('#kc-buildings-close').addEventListener('click', () => closeAllPanels());
   }
 
   // --- Badges VWAP sur la Bourse ---
@@ -3022,6 +3610,11 @@
           <span>${t('options.restaurants')}</span>
         </label>
         <p class="kc-options-hint">${t('options.restaurantsHint')}</p>
+        <label class="kc-options-row" style="margin-top:14px;">
+          <input type="checkbox" id="kc-options-notify-buildings" ${settings.notifyBuildingsEnabled ? 'checked' : ''} />
+          <span>${t('options.notifyBuildings')}</span>
+        </label>
+        <p class="kc-options-hint">${t('options.notifyBuildingsHint')}</p>
         <label class="kc-options-row" style="margin-top:14px;justify-content:space-between;">
           <span>${t('options.language')}</span>
         </label>
@@ -3040,6 +3633,38 @@
     panel.querySelector('#kc-options-restaurants').addEventListener('change', (e) => {
       saveSettings({ hasRestaurants: e.target.checked });
       renderEventsPanel(lastFetchedEvents, lastResourceNames); // ré-affiche instantanément sans nouvel appel réseau
+    });
+
+    panel.querySelector('#kc-options-notify-buildings').addEventListener('change', (e) => {
+      const checkbox = e.target;
+      if (!checkbox.checked) {
+        saveSettings({ notifyBuildingsEnabled: false });
+        return;
+      }
+      if (!('Notification' in window)) {
+        alert(t('alert.notifPermissionDenied'));
+        checkbox.checked = false;
+        return;
+      }
+      if (Notification.permission === 'granted') {
+        saveSettings({ notifyBuildingsEnabled: true });
+        return;
+      }
+      if (Notification.permission === 'denied') {
+        alert(t('alert.notifPermissionDenied'));
+        checkbox.checked = false;
+        return;
+      }
+      // Permission pas encore demandée : on le fait ici, dans le même geste
+      // utilisateur (clic sur la case), comme l'exigent les navigateurs.
+      Notification.requestPermission().then((permission) => {
+        if (permission === 'granted') {
+          saveSettings({ notifyBuildingsEnabled: true });
+        } else {
+          alert(t('alert.notifPermissionDenied'));
+          checkbox.checked = false;
+        }
+      });
     });
 
     panel.querySelector('#kc-options-language').addEventListener('change', (e) => {
@@ -3561,7 +4186,7 @@
 
   // --- Gestion commune : ouverture exclusive des panneaux ---
 
-  const OVERLAY_PANEL_IDS = ['kc-menu-panel', 'kc-xp-panel', 'kc-moderators-panel', 'kc-events-panel', 'kc-options-panel', 'kc-customization-panel', 'kc-realmstats-panel', 'kc-seasons-panel', 'kc-prices-panel', 'kc-externaltools-panel'];
+  const OVERLAY_PANEL_IDS = ['kc-menu-panel', 'kc-xp-panel', 'kc-moderators-panel', 'kc-events-panel', 'kc-options-panel', 'kc-customization-panel', 'kc-realmstats-panel', 'kc-seasons-panel', 'kc-prices-panel', 'kc-externaltools-panel', 'kc-buildings-panel'];
 
   function closeAllPanels() {
     OVERLAY_PANEL_IDS.forEach((id) => {
@@ -3687,13 +4312,14 @@
   // reconstruire à neuf (comme on le fait déjà pour l'import de réglages)
   // que de mettre à jour chaque texte affiché un par un.
   function rebuildAllPanelsForLanguageChange() {
-    ['kc-menu-btn', 'kc-menu-panel', 'kc-xp-panel', 'kc-xp-toggle', 'kc-moderators-panel', 'kc-events-panel', 'kc-options-panel', 'kc-customization-panel', 'kc-realmstats-panel', 'kc-seasons-panel', 'kc-prices-panel', 'kc-externaltools-panel'].forEach((id) => {
+    ['kc-menu-btn', 'kc-menu-panel', 'kc-xp-panel', 'kc-xp-toggle', 'kc-moderators-panel', 'kc-events-panel', 'kc-options-panel', 'kc-customization-panel', 'kc-realmstats-panel', 'kc-seasons-panel', 'kc-prices-panel', 'kc-externaltools-panel', 'kc-buildings-panel'].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.remove();
     });
 
     createMenu();
     createXpPanel();
+    renderXpSparkline(loadXpSamples());
     createXpToggleButton();
     createModeratorsPanel();
     createEventsPanel();
@@ -3703,6 +4329,7 @@
     createSeasonsPanel();
     createPricesPanel();
     createExternalToolsPanel();
+    createBuildingsPanel();
 
     // Rouvre le panneau Options (c'est de là que vient le changement de
     // langue) pour que le résultat soit visible immédiatement.
@@ -3716,6 +4343,7 @@
       renderRealmStatsSummary();
       renderRealmStatsList();
     }
+    if (buildingsState.buildings.length > 0) renderBuildingsList();
     refreshXpData();
   }
 
@@ -3724,6 +4352,7 @@
   injectStyle();
   createMenu();
   createXpPanel();
+  renderXpSparkline(loadXpSamples());
   createXpToggleButton();
   createModeratorsPanel();
   createEventsPanel();
@@ -3737,14 +4366,22 @@
   createSeasonsPanel();
   createPricesPanel();
   createExternalToolsPanel();
+  createBuildingsPanel();
   const WELCOME_SHOWN_KEY = 'kc_welcome_shown_v1';
-  if (!localStorage.getItem(WELCOME_SHOWN_KEY)) {
+  const isFirstEverRun = !localStorage.getItem(WELCOME_SHOWN_KEY);
+  if (isFirstEverRun) {
     showWelcomeToast();
     try {
       localStorage.setItem(WELCOME_SHOWN_KEY, '1');
+      // Pas de changelog en plus au tout premier lancement : le toast de
+      // bienvenue suffit. On marque direct la version actuelle comme "déjà
+      // vue" pour que le changelog ne s'affiche qu'à la prochaine mise à jour.
+      if (CURRENT_SCRIPT_VERSION) localStorage.setItem(CHANGELOG_SHOWN_KEY, CURRENT_SCRIPT_VERSION);
     } catch (err) {
       // stockage indisponible : le message pourra réapparaître, sans gravité
     }
+  } else {
+    maybeShowChangelog();
   }
   refreshXpData();
   setInterval(refreshXpData, XP_POLL_INTERVAL_MS);
@@ -3762,4 +4399,18 @@
   // Même principe pour les contrats entrants (VWAP par contrat).
   setInterval(checkIncomingContractsPage, 2000);
   checkIncomingContractsPage();
+
+  // Sondage de la carte (toutes les 15s, lecture DOM uniquement, aucun
+  // appel réseau) : alimente à la fois le panneau "Bâtiments" (si ouvert)
+  // et les notifications de fin de construction/production (si activées).
+  function pollMapOverview() {
+    const overview = computeBuildingOverview();
+    if (!overview) return; // pas sur la carte
+    buildingsState.buildings = overview;
+    const panel = document.getElementById('kc-buildings-panel');
+    if (panel && panel.classList.contains('kc-open')) renderBuildingsList();
+    if (loadSettings().notifyBuildingsEnabled) checkBuildingNotifications(overview);
+  }
+  setInterval(pollMapOverview, 15000);
+  pollMapOverview();
 })();
