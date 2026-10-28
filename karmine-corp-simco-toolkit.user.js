@@ -1,9 +1,9 @@
 // ==UserScript==
-// @name         Karmine Tool (bêta)
+// @name         FoxTool (bêta)
 // @namespace    https://github.com/Dwakoz
-// @version      1.23.0
-// @description  Extension communautaire pour Sim Companies, développée par le joueur Karmine Corp. Calculateur XP, modérateurs FR et plus à venir.
-// @author       Karmine Corp
+// @version      1.24.0
+// @description  Extension communautaire pour Sim Companies, développée par le joueur The Fox. Calculateur XP, modérateurs FR et plus à venir.
+// @author       The Fox
 // @match        https://www.simcompanies.com/*
 // @match        https://simcompanies.com/*
 // @icon         https://www.simcompanies.com/favicon.ico
@@ -184,7 +184,7 @@
 
   const I18N = {
     fr: {
-      'menu.openAria': 'Ouvrir le menu Karmine Tool',
+      'menu.openAria': 'Ouvrir le menu FoxTool',
       'xp.openAria': 'Ouvrir le calculateur XP',
       'menu.moderators': 'Modérateurs',
       'menu.events': 'Événements',
@@ -202,7 +202,7 @@
       'common.loadFailed': 'Échec du chargement. Réessaie dans un instant.',
       'toast.title': 'Bienvenue à bord',
       'toast.text':
-        "Cette extension est développée par Karmine Corp, un joueur de la communauté Sim Companies, pour améliorer votre expérience de jeu. Retrouvez tous les outils depuis le bouton en haut à droite.",
+        "Cette extension est développée par The Fox, un joueur de la communauté Sim Companies, pour améliorer votre expérience de jeu. Retrouvez tous les outils depuis le bouton en haut à droite.",
       'xp.title': 'Calculateur XP',
       'xp.levelPlaceholder': 'Niveau —',
       'xp.progressPlaceholder': '—',
@@ -280,7 +280,7 @@
       'options.notifyBuildingsHint':
         "Affiche une notification du navigateur quand une construction/amélioration ou une production se termine. Nécessite d'autoriser les notifications pour ce site, et de garder cet onglet ouvert.",
       'options.language': 'Langue de l\'outil',
-      'options.languageHint': "Change la langue de l'interface de Karmine Tool (pas celle du jeu lui-même).",
+      'options.languageHint': "Change la langue de l'interface de FoxTool (pas celle du jeu lui-même).",
       'alert.notifPermissionDenied':
         'Les notifications sont bloquées pour ce site dans ton navigateur. Autorise-les dans les réglages du site pour activer cette option.',
       'notif.constructionDone': '{name} a terminé sa construction/amélioration !',
@@ -346,7 +346,7 @@
       'alert.imageSaveFailed':
         "Échec de l'enregistrement : l'image est trop volumineuse pour le stockage disponible. Essaie une image plus légère.",
       'alert.imageReadFailed': "Échec de la lecture de l'image. Réessaie avec un autre fichier.",
-      'alert.importInvalidFile': "Fichier invalide : ce n'est pas un export valide de Karmine Tool.",
+      'alert.importInvalidFile': "Fichier invalide : ce n'est pas un export valide de FoxTool.",
       'alert.importNothingFound': 'Aucun réglage reconnu dans ce fichier.',
       'alert.importReadFailed': 'Échec de la lecture du fichier.',
       'vwap.tooltipContract': 'VWAP (7 jours, qualité {quality}) : ${vwap} — voir sur SimcoTools',
@@ -354,7 +354,7 @@
       'common.opacity': 'Opacité',
     },
     en: {
-      'menu.openAria': 'Open the Karmine Tool menu',
+      'menu.openAria': 'Open the FoxTool menu',
       'xp.openAria': 'Open the XP calculator',
       'menu.moderators': 'Moderators',
       'menu.events': 'Events',
@@ -372,7 +372,7 @@
       'common.loadFailed': 'Failed to load. Try again in a moment.',
       'toast.title': 'Welcome aboard',
       'toast.text':
-        'This extension is developed by Karmine Corp, a Sim Companies community player, to improve your gaming experience. Find all the tools from the button in the top right corner.',
+        'This extension is developed by The Fox, a Sim Companies community player, to improve your gaming experience. Find all the tools from the button in the top right corner.',
       'xp.title': 'XP Calculator',
       'xp.levelPlaceholder': 'Level —',
       'xp.progressPlaceholder': '—',
@@ -450,7 +450,7 @@
       'options.notifyBuildingsHint':
         'Shows a browser notification when a construction/upgrade or a production run finishes. Requires allowing notifications for this site, and keeping this tab open.',
       'options.language': 'Tool language',
-      'options.languageHint': "Changes the Karmine Tool interface language (not the game's own language).",
+      'options.languageHint': "Changes the FoxTool interface language (not the game's own language).",
       'alert.notifPermissionDenied':
         'Notifications are blocked for this site in your browser. Allow them in the site settings to enable this option.',
       'notif.constructionDone': '{name} finished its construction/upgrade!',
@@ -515,7 +515,7 @@
       'alert.imageTooLarge': 'Image too large (max ~3 MB). Choose a lighter image.',
       'alert.imageSaveFailed': 'Save failed: the image is too large for the available storage. Try a lighter image.',
       'alert.imageReadFailed': 'Failed to read the image. Try another file.',
-      'alert.importInvalidFile': 'Invalid file: this is not a valid Karmine Tool export.',
+      'alert.importInvalidFile': 'Invalid file: this is not a valid FoxTool export.',
       'alert.importNothingFound': 'No recognizable settings found in this file.',
       'alert.importReadFailed': 'Failed to read the file.',
       'vwap.tooltipContract': 'VWAP (7-day, quality {quality}): ${vwap} — view on SimcoTools',
@@ -2247,7 +2247,7 @@
     toast.id = 'kc-toast';
     toast.setAttribute('role', 'status');
     toast.innerHTML = `
-      <span id="kc-toast-status">Karmine Tool</span>
+      <span id="kc-toast-status">FoxTool</span>
       <div id="kc-toast-body">
         <p id="kc-toast-title">${t('toast.title')}</p>
         <p id="kc-toast-text">${t('toast.text')}</p>
@@ -2291,6 +2291,10 @@
         '3 new external tools: Simcolike, SimcoGuides, SC Dibbleganger.',
       ],
     },
+    '1.24.0': {
+      fr: ['Renommage : "Karmine Tool" devient "FoxTool", suite au changement d\'identité en jeu de son auteur (désormais The Fox).'],
+      en: ['Rename: "Karmine Tool" is now "FoxTool", following its author\'s in-game identity change (now The Fox).'],
+    },
   };
 
   function showChangelogToast(version, entries) {
@@ -2301,7 +2305,7 @@
     toast.id = 'kc-toast';
     toast.setAttribute('role', 'status');
     toast.innerHTML = `
-      <span id="kc-toast-status">Karmine Tool — v${version}</span>
+      <span id="kc-toast-status">FoxTool — v${version}</span>
       <div id="kc-toast-body">
         <p id="kc-toast-title">${t('changelog.title')}</p>
         <ul id="kc-toast-list">
@@ -2548,7 +2552,7 @@
     });
     if (!best) {
       console.warn(
-        `[Karmine Tool] Aucune correspondance de prix trouvée (attendu ${unitPrice}). Textes candidats :`,
+        `[FoxTool] Aucune correspondance de prix trouvée (attendu ${unitPrice}). Textes candidats :`,
         candidates.map((el) => el.textContent.trim()).filter((t) => t)
       );
     }
@@ -2629,7 +2633,7 @@
             contractVwapCache[cacheKey] = { map: vwapMap, fetchedAt };
             applyToGroup(vwapMap, fetchedAt);
           })
-          .catch((err) => console.error('[Karmine Tool] Échec du VWAP pour un contrat entrant :', err))
+          .catch((err) => console.error('[FoxTool] Échec du VWAP pour un contrat entrant :', err))
           .finally(() => contractVwapFetchesInFlight.delete(cacheKey));
       }
     });
@@ -2724,7 +2728,7 @@
         renderPricesList();
       })
       .catch((err) => {
-        console.error('[Karmine Tool] Échec du chargement des prix du marché :', err);
+        console.error('[FoxTool] Échec du chargement des prix du marché :', err);
         if (body) body.innerHTML = `<p id="kc-prices-empty">${t('common.loadFailed')}</p>`;
       })
       .finally(() => {
@@ -2737,7 +2741,7 @@
     panel.id = 'kc-prices-panel';
     panel.setAttribute('role', 'status');
     panel.innerHTML = `
-      <span id="kc-prices-status">Karmine Tool — ${t('prices.title')}</span>
+      <span id="kc-prices-status">FoxTool — ${t('prices.title')}</span>
       <p id="kc-prices-hint">${t('prices.hint')}</p>
       <div id="kc-prices-controls">
         <input type="text" id="kc-prices-search" placeholder="${t('prices.searchPlaceholder')}" />
@@ -2941,7 +2945,7 @@
     if (!('Notification' in window) || Notification.permission !== 'granted') return;
     const key = building.status === 'construction' ? 'notif.constructionDone' : 'notif.productionReady';
     try {
-      new Notification('Karmine Tool', {
+      new Notification('FoxTool', {
         body: t(key, { name: building.name }),
         icon: 'https://www.simcompanies.com/favicon.ico',
         tag: `kc-building-${building.id || building.name}`,
@@ -3041,7 +3045,7 @@
         renderXpPanel(data.levelInfo, measuredRate ? { xpPerHour: measuredRate, source: 'measured' } : null);
       })
       .catch((err) => {
-        console.error('[Karmine Tool] Échec du rafraîchissement XP :', err);
+        console.error('[FoxTool] Échec du rafraîchissement XP :', err);
       })
       .finally(() => {
         xpRefreshInFlight = false;
@@ -3142,7 +3146,7 @@
     panel.id = 'kc-xp-panel';
     panel.setAttribute('role', 'status');
     panel.innerHTML = `
-      <span id="kc-xp-status">Karmine Tool — ${t('xp.title')}</span>
+      <span id="kc-xp-status">FoxTool — ${t('xp.title')}</span>
       <div id="kc-xp-body">
         <p id="kc-xp-level">${t('xp.levelPlaceholder')}</p>
         <div id="kc-xp-track"><div id="kc-xp-fill"></div></div>
@@ -3253,7 +3257,7 @@
     panel.id = 'kc-buildings-panel';
     panel.setAttribute('role', 'status');
     panel.innerHTML = `
-      <span id="kc-buildings-status">Karmine Tool — ${t('buildings.title')}</span>
+      <span id="kc-buildings-status">FoxTool — ${t('buildings.title')}</span>
       <div id="kc-buildings-controls">
         <input type="text" id="kc-buildings-search" placeholder="${t('buildings.searchPlaceholder')}" />
         <select id="kc-buildings-sort">
@@ -3386,7 +3390,7 @@
         });
         applyVwapBadges();
       })
-      .catch((err) => console.error('[Karmine Tool] Échec du chargement du VWAP :', err));
+      .catch((err) => console.error('[FoxTool] Échec du chargement du VWAP :', err));
   }
 
   function checkMarketPage() {
@@ -3542,7 +3546,7 @@
         renderEventsPanel(events, resourceNames);
       })
       .catch((err) => {
-        console.error('[Karmine Tool] Échec du chargement des événements marché :', err);
+        console.error('[FoxTool] Échec du chargement des événements marché :', err);
         if (panel) {
           panel.querySelector('#kc-events-body').innerHTML = `<p id="kc-events-empty">${t('common.loadFailed')}</p>`;
         }
@@ -3557,7 +3561,7 @@
     panel.id = 'kc-events-panel';
     panel.setAttribute('role', 'status');
     panel.innerHTML = `
-      <span id="kc-events-status">Karmine Tool — ${t('events.title')}</span>
+      <span id="kc-events-status">FoxTool — ${t('events.title')}</span>
       <div id="kc-events-body">
         <p id="kc-events-empty">${t('events.openToLoad')}</p>
       </div>
@@ -3603,7 +3607,7 @@
     panel.setAttribute('role', 'status');
     const settings = loadSettings();
     panel.innerHTML = `
-      <span id="kc-options-status">Karmine Tool — ${t('options.title')}</span>
+      <span id="kc-options-status">FoxTool — ${t('options.title')}</span>
       <div id="kc-options-body">
         <label class="kc-options-row">
           <input type="checkbox" id="kc-options-restaurants" ${settings.hasRestaurants ? 'checked' : ''} />
@@ -3700,7 +3704,7 @@
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `karmine-tool-reglages-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `foxtool-reglages-${new Date().toISOString().slice(0, 10)}.json`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -3750,7 +3754,7 @@
     const settings = loadSettings();
     const hasCustomBg = !!loadCustomBackground();
     panel.innerHTML = `
-      <span id="kc-customization-status">Karmine Tool — ${t('customization.title')}</span>
+      <span id="kc-customization-status">FoxTool — ${t('customization.title')}</span>
       <div id="kc-customization-body">
         <div id="kc-customization-backup-row">
           <button id="kc-customization-export" type="button" class="kc-options-reset-btn">${t('customization.export')}</button>
@@ -4042,7 +4046,7 @@
         renderRealmStatsList();
       })
       .catch((err) => {
-        console.error('[Karmine Tool] Échec du chargement des statistiques du royaume :', err);
+        console.error('[FoxTool] Échec du chargement des statistiques du royaume :', err);
         if (list) list.innerHTML = `<p id="kc-realmstats-empty">${t('common.loadFailed')}</p>`;
       })
       .finally(() => {
@@ -4055,7 +4059,7 @@
     panel.id = 'kc-realmstats-panel';
     panel.setAttribute('role', 'status');
     panel.innerHTML = `
-      <span id="kc-realmstats-status">Karmine Tool — ${t('realmStats.title')}</span>
+      <span id="kc-realmstats-status">FoxTool — ${t('realmStats.title')}</span>
       <div id="kc-realmstats-summary">
         <span id="kc-realmstats-total">—</span>
         <span id="kc-realmstats-phase" class="kc-phase-badge kc-phase-normal" style="display:none"></span>
@@ -4113,7 +4117,7 @@
     panel.id = 'kc-seasons-panel';
     panel.setAttribute('role', 'status');
     panel.innerHTML = `
-      <span id="kc-seasons-status">Karmine Tool — ${t('seasons.title')}</span>
+      <span id="kc-seasons-status">FoxTool — ${t('seasons.title')}</span>
       <div id="kc-seasons-body">
         <p class="kc-seasons-group-title">${t('seasons.production')}</p>
         ${SEASONS_DATA.production.map(renderSeasonCard).join('')}
@@ -4144,7 +4148,7 @@
     panel.id = 'kc-moderators-panel';
     panel.setAttribute('role', 'status');
     panel.innerHTML = `
-      <span id="kc-moderators-status">Karmine Tool — ${t('moderators.title')}</span>
+      <span id="kc-moderators-status">FoxTool — ${t('moderators.title')}</span>
       <div id="kc-moderators-body">
         ${MODERATORS_DATA.map(renderModeratorRow).join('')}
       </div>
@@ -4172,7 +4176,7 @@
     panel.id = 'kc-externaltools-panel';
     panel.setAttribute('role', 'status');
     panel.innerHTML = `
-      <span id="kc-externaltools-status">Karmine Tool — ${t('externalTools.title')}</span>
+      <span id="kc-externaltools-status">FoxTool — ${t('externalTools.title')}</span>
       <div id="kc-externaltools-body">
         ${EXTERNAL_TOOLS_DATA.map(renderExternalToolRow).join('')}
       </div>
@@ -4273,7 +4277,7 @@
     const panel = document.createElement('div');
     panel.id = 'kc-menu-panel';
     panel.innerHTML = `
-      <div id="kc-menu-header">Karmine Tool</div>
+      <div id="kc-menu-header">FoxTool</div>
       <ul id="kc-menu-list"></ul>
     `;
 
