@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         FoxTool (bêta)
 // @namespace    https://github.com/Dwakoz
-// @version      1.26.0
-// @description  Extension communautaire pour Sim Companies, développée par le joueur The Fox. Calculateur XP, modérateurs FR et plus à venir.
-// @author       The Fox
+// @version      1.27.0
+// @description  Extension communautaire pour Sim Companies, développée par le joueur TAMED FOX. Calculateur XP, modérateurs FR et plus à venir.
+// @author       TAMED FOX
 // @match        https://www.simcompanies.com/*
 // @match        https://simcompanies.com/*
 // @icon         https://www.simcompanies.com/favicon.ico
@@ -206,7 +206,7 @@
       'common.loadFailed': 'Échec du chargement. Réessaie dans un instant.',
       'toast.title': 'Bienvenue à bord',
       'toast.text':
-        "Cette extension est développée par The Fox, un joueur de la communauté Sim Companies, pour améliorer votre expérience de jeu. Retrouvez tous les outils depuis le bouton en haut à droite.",
+        "Cette extension est développée par TAMED FOX, un joueur de la communauté Sim Companies, pour améliorer votre expérience de jeu. Retrouvez tous les outils depuis le bouton en haut à droite.",
       'xp.title': 'Calculateur XP',
       'xp.levelPlaceholder': 'Niveau —',
       'xp.progressPlaceholder': '—',
@@ -378,7 +378,7 @@
       'common.loadFailed': 'Failed to load. Try again in a moment.',
       'toast.title': 'Welcome aboard',
       'toast.text':
-        'This extension is developed by The Fox, a Sim Companies community player, to improve your gaming experience. Find all the tools from the button in the top right corner.',
+        'This extension is developed by TAMED FOX, a Sim Companies community player, to improve your gaming experience. Find all the tools from the button in the top right corner.',
       'xp.title': 'XP Calculator',
       'xp.levelPlaceholder': 'Level —',
       'xp.progressPlaceholder': '—',
@@ -2312,6 +2312,10 @@
     '1.26.0': {
       fr: ['Personnalisation : nouvelle couleur réglable pour le fond des icônes de ressource sur la page Bourse.'],
       en: ['Customization: new adjustable color for the resource icon background on the Exchange page.'],
+    },
+    '1.27.0': {
+      fr: ['Mise à jour de l\'identité de l\'auteur : "The Fox" devient "TAMED FOX".'],
+      en: ['Author identity update: "The Fox" is now "TAMED FOX".'],
     },
   };
 
