@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         FoxTool (bêta)
 // @namespace    https://github.com/Dwakoz
-// @version      1.24.0
+// @version      1.26.0
 // @description  Extension communautaire pour Sim Companies, développée par le joueur The Fox. Calculateur XP, modérateurs FR et plus à venir.
 // @author       The Fox
 // @match        https://www.simcompanies.com/*
@@ -151,6 +151,10 @@
     activeContactBgColorAlpha: 100,
     mentionLinkColor: '#58A8CF',
     mentionLinkColorAlpha: 100,
+    resourceCardBgColor: '#333333',
+    resourceCardBgColorAlpha: 100,
+    exchangeResourceIconBgColor: '#333333',
+    exchangeResourceIconBgColorAlpha: 100,
     hideBuildingOverlay: false,
     notifyBuildingsEnabled: false,
   };
@@ -334,6 +338,8 @@
       'chatColor.inputBg': 'Fond — zone de saisie',
       'chatColor.inputText': 'Texte — zone de saisie',
       'chatColor.tickerScrollbar': 'Barre de défilement — bandeau de ressources',
+      'chatColor.resourceCardBg': 'Fond des cartes de ressources',
+      'chatColor.exchangeResourceIconBg': 'Fond des icônes de ressource (Bourse)',
       'chatColor.pageBg': 'Fond de la page (tout le jeu)',
       'chatColor.topBar': 'Barre du haut',
       'chatColor.bottomBar': 'Barre du bas (Carte/Entrepôt/...)',
@@ -504,6 +510,8 @@
       'chatColor.inputBg': 'Background — input box',
       'chatColor.inputText': 'Text — input box',
       'chatColor.tickerScrollbar': 'Scrollbar — resource ticker',
+      'chatColor.resourceCardBg': 'Resource card background',
+      'chatColor.exchangeResourceIconBg': 'Resource icon background (Exchange)',
       'chatColor.pageBg': 'Page background (whole game)',
       'chatColor.topBar': 'Top bar',
       'chatColor.bottomBar': 'Bottom bar (Map/Warehouse/...)',
@@ -665,6 +673,8 @@
         .well-header { color: ${c.chatSectionHeaderColor} !important; }
         textarea[placeholder*="crire ici"] { background: ${c.chatInputBgColor} !important; color: ${c.chatInputTextColor} !important; }
         .css-1k853ki { background: ${c.resourceTickerScrollbarColor} !important; }
+        .css-q07d9g { background: ${c.resourceCardBgColor} !important; }
+        .css-1p8iboq { background: ${c.exchangeResourceIconBgColor} !important; }
         body { background: ${c.pageBgColor} !important; }
         .navbar-fixed-top { background: ${c.topBarColor} !important; }
         .css-15rmbqw { background: ${c.bottomBarColor} !important; }
@@ -2295,6 +2305,14 @@
       fr: ['Renommage : "Karmine Tool" devient "FoxTool", suite au changement d\'identité en jeu de son auteur (désormais The Fox).'],
       en: ['Rename: "Karmine Tool" is now "FoxTool", following its author\'s in-game identity change (now The Fox).'],
     },
+    '1.25.0': {
+      fr: ['Personnalisation : nouvelle couleur réglable pour le fond des cartes de ressources (bandeau Nourriture, etc.).'],
+      en: ['Customization: new adjustable color for the resource card background (Food ticker, etc.).'],
+    },
+    '1.26.0': {
+      fr: ['Personnalisation : nouvelle couleur réglable pour le fond des icônes de ressource sur la page Bourse.'],
+      en: ['Customization: new adjustable color for the resource icon background on the Exchange page.'],
+    },
   };
 
   function showChangelogToast(version, entries) {
@@ -3591,6 +3609,8 @@
     { id: 'input-bg', settingKey: 'chatInputBgColor', labelKey: 'chatColor.inputBg' },
     { id: 'input-text', settingKey: 'chatInputTextColor', labelKey: 'chatColor.inputText' },
     { id: 'ticker-scrollbar', settingKey: 'resourceTickerScrollbarColor', labelKey: 'chatColor.tickerScrollbar' },
+    { id: 'resource-card-bg', settingKey: 'resourceCardBgColor', labelKey: 'chatColor.resourceCardBg' },
+    { id: 'exchange-resource-icon-bg', settingKey: 'exchangeResourceIconBgColor', labelKey: 'chatColor.exchangeResourceIconBg' },
     { id: 'page-bg', settingKey: 'pageBgColor', labelKey: 'chatColor.pageBg' },
     { id: 'top-bar', settingKey: 'topBarColor', labelKey: 'chatColor.topBar' },
     { id: 'bottom-bar', settingKey: 'bottomBarColor', labelKey: 'chatColor.bottomBar' },
