@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         FoxTool (bêta)
 // @namespace    https://github.com/Dwakoz
-// @version      1.27.0
+// @version      1.31.0
 // @description  Extension communautaire pour Sim Companies, développée par le joueur TAMED FOX. Calculateur XP, modérateurs FR et plus à venir.
 // @author       TAMED FOX
 // @match        https://www.simcompanies.com/*
@@ -60,6 +60,14 @@
         },
       },
       {
+        id: 'notes',
+        label: t('menu.notes'),
+        onSelect: () => {
+          openPanel('kc-notes-panel');
+          renderNotesPanel();
+        },
+      },
+      {
         id: 'realm-stats',
         label: t('menu.realmStats'),
         onSelect: () => {
@@ -89,6 +97,14 @@
         id: 'customization',
         label: t('menu.customization'),
         onSelect: () => openPanel('kc-customization-panel'),
+      },
+      {
+        id: 'changelog',
+        label: t('menu.changelog'),
+        onSelect: () => {
+          openPanel('kc-changelog-panel');
+          renderChangelogPanel();
+        },
       },
       {
         id: 'options',
@@ -193,6 +209,16 @@
       'menu.moderators': 'Modérateurs',
       'menu.events': 'Événements',
       'menu.buildings': 'Bâtiments',
+      'menu.notes': 'Bloc-notes',
+      'notes.title': 'Bloc-notes',
+      'notes.placeholder': 'Écris tes notes ici…',
+      'notes.hint': 'Enregistré automatiquement, uniquement dans ce navigateur (rien n\'est envoyé en ligne).',
+      'notes.defaultName': 'Note {n}',
+      'notes.add': 'Nouvel onglet',
+      'notes.rename': 'Renommer',
+      'notes.delete': 'Supprimer',
+      'notes.renamePrompt': 'Nouveau nom de l\'onglet :',
+      'notes.deleteConfirm': 'Supprimer l\'onglet « {name} » et son contenu ?',
       'menu.realmStats': 'Statistiques du royaume',
       'menu.seasons': 'Saisons',
       'menu.prices': 'Prix du marché',
@@ -289,7 +315,9 @@
         'Les notifications sont bloquées pour ce site dans ton navigateur. Autorise-les dans les réglages du site pour activer cette option.',
       'notif.constructionDone': '{name} a terminé sa construction/amélioration !',
       'notif.productionReady': '{name} a terminé sa production !',
-      'changelog.title': 'Nouveautés de cette version',
+      'changelog.title': 'Nouveautés',
+      'changelog.current': 'version actuelle',
+      'menu.changelog': 'Nouveautés',
       'buildings.title': 'Bâtiments',
       'buildings.openToLoad': 'Ouvre ce panneau depuis la page Carte pour voir tes bâtiments.',
       'buildings.none': 'Aucun bâtiment détecté. Ouvre ce panneau depuis la page Carte.',
@@ -365,6 +393,16 @@
       'menu.moderators': 'Moderators',
       'menu.events': 'Events',
       'menu.buildings': 'Buildings',
+      'menu.notes': 'Notepad',
+      'notes.title': 'Notepad',
+      'notes.placeholder': 'Write your notes here…',
+      'notes.hint': 'Saved automatically, in this browser only (nothing is sent online).',
+      'notes.defaultName': 'Note {n}',
+      'notes.add': 'New tab',
+      'notes.rename': 'Rename',
+      'notes.delete': 'Delete',
+      'notes.renamePrompt': 'New tab name:',
+      'notes.deleteConfirm': 'Delete the "{name}" tab and its content?',
       'menu.realmStats': 'Realm statistics',
       'menu.seasons': 'Seasons',
       'menu.prices': 'Market prices',
@@ -461,7 +499,9 @@
         'Notifications are blocked for this site in your browser. Allow them in the site settings to enable this option.',
       'notif.constructionDone': '{name} finished its construction/upgrade!',
       'notif.productionReady': '{name} finished its production!',
-      'changelog.title': "What's new in this version",
+      'changelog.title': "What's new",
+      'changelog.current': 'current version',
+      'menu.changelog': "What's new",
       'buildings.title': 'Buildings',
       'buildings.openToLoad': 'Open this panel from the Map page to see your buildings.',
       'buildings.none': 'No building detected. Open this panel from the Map page.',
@@ -2192,18 +2232,214 @@
       outline: 2px solid #E8A33D;
       outline-offset: 2px;
     }
-    #kc-toast-list {
-      margin: 8px 0 0;
-      padding-left: 18px;
+    #kc-changelog-panel {
+      position: fixed;
+      top: 108px;
+      right: 16px;
+      width: 360px;
+      max-width: calc(100vw - 48px);
+      max-height: 75vh;
+      overflow-y: auto;
+      background: #10151F;
+      color: #EDE6D8;
+      border-left: 4px solid #E8A33D;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      z-index: 2147483000;
+      transform-origin: top right;
+      transform: scale(0.96);
+      opacity: 0;
+      pointer-events: none;
+      transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.18s ease;
+    }
+    #kc-changelog-panel.kc-open {
+      transform: scale(1);
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #kc-changelog-status {
+      display: block;
+      padding: 8px 16px;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 11px;
+      letter-spacing: 0.02em;
+      color: #9FB0C3;
+      background: #1B2436;
+      border-bottom: 1px solid #3E7C74;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+    #kc-changelog-list {
+      padding: 4px 16px 0;
+    }
+    .kc-changelog-version {
+      padding: 10px 0;
+      border-bottom: 1px solid #1B2436;
+    }
+    .kc-changelog-version:last-child {
+      border-bottom: none;
+    }
+    .kc-changelog-version-title {
+      margin: 0 0 6px;
       font-size: 13px;
+      font-weight: 600;
+      color: #E8A33D;
+    }
+    .kc-changelog-version ul {
+      margin: 0;
+      padding-left: 18px;
+      font-size: 12px;
       line-height: 1.5;
       color: #C7D0DB;
     }
-    #kc-toast-list li {
+    .kc-changelog-version li {
       margin-bottom: 4px;
     }
+    #kc-changelog-footer {
+      display: flex;
+      justify-content: flex-end;
+      padding: 8px 16px 16px;
+    }
+    #kc-changelog-close {
+      appearance: none;
+      border: 1px solid #3E7C74;
+      background: transparent;
+      color: #EDE6D8;
+      font-size: 12px;
+      padding: 6px 14px;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+    #kc-changelog-close:hover {
+      background: #1B2436;
+    }
+    #kc-changelog-close:focus-visible {
+      outline: 2px solid #E8A33D;
+      outline-offset: 2px;
+    }
+    #kc-notes-panel {
+      position: fixed;
+      top: 108px;
+      right: 16px;
+      width: 360px;
+      max-width: calc(100vw - 48px);
+      max-height: 80vh;
+      overflow-y: auto;
+      background: #10151F;
+      color: #EDE6D8;
+      border-left: 4px solid #E8A33D;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      z-index: 2147483000;
+      transform-origin: top right;
+      transform: scale(0.96);
+      opacity: 0;
+      pointer-events: none;
+      transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.18s ease;
+    }
+    #kc-notes-panel.kc-open {
+      transform: scale(1);
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #kc-notes-status {
+      display: block;
+      padding: 8px 16px;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 11px;
+      letter-spacing: 0.02em;
+      color: #9FB0C3;
+      background: #1B2436;
+      border-bottom: 1px solid #3E7C74;
+    }
+    #kc-notes-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      padding: 10px 16px 0;
+    }
+    .kc-notes-tab {
+      appearance: none;
+      max-width: 120px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      background: #1B2436;
+      border: 1px solid #3E7C74;
+      color: #9FB0C3;
+      font-size: 12px;
+      padding: 4px 10px;
+      cursor: pointer;
+    }
+    .kc-notes-tab:hover {
+      color: #EDE6D8;
+    }
+    .kc-notes-tab.kc-active {
+      background: #E8A33D;
+      border-color: #E8A33D;
+      color: #10151F;
+      font-weight: 600;
+    }
+    .kc-notes-add {
+      padding: 4px 9px;
+    }
+    #kc-notes-body {
+      padding: 10px 16px 0;
+    }
+    #kc-notes-text {
+      box-sizing: border-box;
+      width: 100%;
+      height: 220px;
+      resize: vertical;
+      background: #1B2436;
+      border: 1px solid #3E7C74;
+      color: #EDE6D8;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 13px;
+      line-height: 1.45;
+      padding: 8px;
+    }
+    #kc-notes-text:focus {
+      outline: 2px solid #E8A33D;
+      outline-offset: 1px;
+    }
+    #kc-notes-footer {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 8px 16px 16px;
+    }
+    #kc-notes-rename,
+    #kc-notes-delete,
+    #kc-notes-close {
+      appearance: none;
+      border: 1px solid #3E7C74;
+      background: transparent;
+      color: #EDE6D8;
+      font-size: 12px;
+      padding: 6px 14px;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+    #kc-notes-rename:hover,
+    #kc-notes-delete:hover,
+    #kc-notes-close:hover {
+      background: #1B2436;
+    }
+    #kc-notes-delete:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    #kc-notes-rename:focus-visible,
+    #kc-notes-delete:focus-visible,
+    #kc-notes-close:focus-visible,
+    .kc-notes-tab:focus-visible {
+      outline: 2px solid #E8A33D;
+      outline-offset: 2px;
+    }
     @media (prefers-reduced-motion: reduce) {
-      #kc-toast, #kc-menu-panel, #kc-xp-panel, #kc-moderators-panel, #kc-events-panel, #kc-options-panel, #kc-customization-panel, #kc-realmstats-panel, #kc-seasons-panel, #kc-prices-panel, #kc-externaltools-panel, #kc-buildings-panel {
+      #kc-toast, #kc-menu-panel, #kc-xp-panel, #kc-moderators-panel, #kc-events-panel, #kc-options-panel, #kc-customization-panel, #kc-realmstats-panel, #kc-seasons-panel, #kc-prices-panel, #kc-externaltools-panel, #kc-buildings-panel, #kc-notes-panel, #kc-changelog-panel {
         transition: opacity 0.3s ease;
         transform: none;
       }
@@ -2285,7 +2521,6 @@
   // changé, je comprends pas pourquoi". Une entrée par version, à
   // compléter à la main à chaque release ; une version sans entrée ne
   // déclenche simplement rien.
-  const CHANGELOG_SHOWN_KEY = 'kc_changelog_shown_version_v1';
   const CHANGELOG = {
     '1.23.0': {
       fr: [
@@ -2317,55 +2552,76 @@
       fr: ['Mise à jour de l\'identité de l\'auteur : "The Fox" devient "TAMED FOX".'],
       en: ['Author identity update: "The Fox" is now "TAMED FOX".'],
     },
+    '1.29.0': {
+      fr: ['Retrait de la fonction "Historique de prix" (bouton 📈), instable et peu utile ; nettoyage interne du script.'],
+      en: ['Removed the "Price history" feature (📈 button), unreliable and of little use; internal script cleanup.'],
+    },
+    '1.30.0': {
+      fr: ['Nouveau : bloc-notes à onglets (menu → Bloc-notes). Jusqu\'à 10 onglets renommables, enregistrés automatiquement dans ton navigateur.'],
+      en: ['New: tabbed notepad (menu → Notepad). Up to 10 renamable tabs, saved automatically in your browser.'],
+    },
+    '1.30.1': {
+      fr: ['Correctif : le bloc-notes ne se referme plus quand on clique sur un onglet, le « + », ou qu\'on renomme/supprime un onglet.'],
+      en: ['Fix: the notepad no longer closes when clicking a tab, the "+", or when renaming/deleting a tab.'],
+    },
+    '1.31.0': {
+      fr: ['Nouveau : onglet « Nouveautés » dans le menu, avec l\'historique complet des changements. Le pop-up affiché à chaque mise à jour est supprimé.'],
+      en: ['New: "What\'s new" tab in the menu, with the full change history. The popup shown on every update is removed.'],
+    },
   };
 
-  function showChangelogToast(version, entries) {
-    const existing = document.getElementById('kc-toast');
-    if (existing) existing.remove();
-
-    const toast = document.createElement('div');
-    toast.id = 'kc-toast';
-    toast.setAttribute('role', 'status');
-    toast.innerHTML = `
-      <span id="kc-toast-status">FoxTool — v${version}</span>
-      <div id="kc-toast-body">
-        <p id="kc-toast-title">${t('changelog.title')}</p>
-        <ul id="kc-toast-list">
-          ${entries.map((entry) => `<li>${entry}</li>`).join('')}
-        </ul>
-      </div>
-      <div id="kc-toast-footer">
-        <button id="kc-toast-close" type="button">${t('common.close')}</button>
-      </div>
-    `;
-    document.body.appendChild(toast);
-
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => toast.classList.add('kc-visible'));
-    });
-
-    document.getElementById('kc-toast-close').addEventListener('click', () => {
-      toast.classList.remove('kc-visible');
-      setTimeout(() => toast.remove(), 500);
-    });
+  // Panneau « Nouveautés » : historique complet des changements, consultable
+  // à tout moment depuis le menu (remplace l'ancien pop-up de mise à jour).
+  function compareVersionsDesc(a, b) {
+    const pa = a.split('.').map(Number);
+    const pb = b.split('.').map(Number);
+    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+      const diff = (pb[i] || 0) - (pa[i] || 0);
+      if (diff !== 0) return diff;
+    }
+    return 0;
   }
 
-  function maybeShowChangelog() {
-    if (!CURRENT_SCRIPT_VERSION || !CHANGELOG[CURRENT_SCRIPT_VERSION]) return;
-    let lastShown = null;
-    try {
-      lastShown = localStorage.getItem(CHANGELOG_SHOWN_KEY);
-    } catch (err) {
-      // stockage indisponible : on affichera simplement à chaque démarrage, sans gravité
-    }
-    if (lastShown === CURRENT_SCRIPT_VERSION) return;
-    const entries = CHANGELOG[CURRENT_SCRIPT_VERSION][currentLanguage] || CHANGELOG[CURRENT_SCRIPT_VERSION].fr || [];
-    if (entries.length > 0) showChangelogToast(CURRENT_SCRIPT_VERSION, entries);
-    try {
-      localStorage.setItem(CHANGELOG_SHOWN_KEY, CURRENT_SCRIPT_VERSION);
-    } catch (err) {
-      // stockage indisponible : le changelog pourra réapparaître, sans gravité
-    }
+  function renderChangelogPanel() {
+    const list = document.getElementById('kc-changelog-list');
+    if (!list) return;
+    list.innerHTML = '';
+    Object.keys(CHANGELOG)
+      .sort(compareVersionsDesc)
+      .forEach((version) => {
+        const entries = CHANGELOG[version][currentLanguage] || CHANGELOG[version].fr || [];
+        if (entries.length === 0) return;
+        const block = document.createElement('div');
+        block.className = 'kc-changelog-version';
+        const title = document.createElement('p');
+        title.className = 'kc-changelog-version-title';
+        title.textContent = 'v' + version + (version === CURRENT_SCRIPT_VERSION ? ' — ' + t('changelog.current') : '');
+        const ul = document.createElement('ul');
+        entries.forEach((entry) => {
+          const li = document.createElement('li');
+          li.textContent = entry; // textContent : aucun HTML interprété
+          ul.appendChild(li);
+        });
+        block.appendChild(title);
+        block.appendChild(ul);
+        list.appendChild(block);
+      });
+  }
+
+  function createChangelogPanel() {
+    const panel = document.createElement('div');
+    panel.id = 'kc-changelog-panel';
+    panel.setAttribute('role', 'status');
+    panel.innerHTML = `
+      <span id="kc-changelog-status">FoxTool — ${t('changelog.title')}</span>
+      <div id="kc-changelog-list"></div>
+      <div id="kc-changelog-footer">
+        <button id="kc-changelog-close" type="button">${t('common.close')}</button>
+      </div>
+    `;
+    document.body.appendChild(panel);
+    panel.querySelector('#kc-changelog-close').addEventListener('click', () => closeAllPanels());
+    renderChangelogPanel();
   }
 
   // --- Calculateur XP ---
@@ -3311,6 +3567,191 @@
     panel.querySelector('#kc-buildings-close').addEventListener('click', () => closeAllPanels());
   }
 
+  // --- Bloc-notes à onglets ---
+  //
+  // Notes libres stockées uniquement dans le navigateur (localStorage) :
+  // rien n'est envoyé nulle part. Plusieurs onglets, enregistrement
+  // automatique pendant la frappe.
+  const NOTES_KEY = 'kc_notes_v1';
+  const NOTES_MAX_TABS = 10;
+  const NOTES_MAX_NAME_LENGTH = 24;
+  const NOTES_MAX_TEXT_LENGTH = 50000;
+  const NOTES_SAVE_DELAY_MS = 300;
+  let notesSaveTimer = null;
+
+  function newNotesId() {
+    return 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  }
+
+  function defaultNotesState() {
+    const id = newNotesId();
+    return { tabs: [{ id, name: t('notes.defaultName', { n: 1 }), text: '' }], active: id };
+  }
+
+  function loadNotesState() {
+    try {
+      const raw = localStorage.getItem(NOTES_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && Array.isArray(parsed.tabs) && parsed.tabs.length > 0) {
+          const tabs = parsed.tabs
+            .filter((tab) => tab && typeof tab.id === 'string')
+            .map((tab) => ({
+              id: tab.id,
+              name: String(tab.name || '').slice(0, NOTES_MAX_NAME_LENGTH) || '—',
+              text: String(tab.text || '').slice(0, NOTES_MAX_TEXT_LENGTH),
+            }));
+          if (tabs.length > 0) {
+            const active = tabs.some((tab) => tab.id === parsed.active) ? parsed.active : tabs[0].id;
+            return { tabs, active };
+          }
+        }
+      }
+    } catch (err) {
+      // JSON corrompu ou stockage indisponible : on repart d'un bloc-notes vide
+    }
+    return defaultNotesState();
+  }
+
+  let notesState = loadNotesState();
+
+  function saveNotesState() {
+    try {
+      localStorage.setItem(NOTES_KEY, JSON.stringify(notesState));
+    } catch (err) {
+      // quota plein ou stockage bloqué : les notes restent en mémoire pour la session
+    }
+  }
+
+  function getActiveNote() {
+    return notesState.tabs.find((tab) => tab.id === notesState.active) || notesState.tabs[0];
+  }
+
+  function renderNotesTabs() {
+    const bar = document.getElementById('kc-notes-tabs');
+    if (!bar) return;
+    bar.innerHTML = '';
+    notesState.tabs.forEach((tab) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'kc-notes-tab' + (tab.id === notesState.active ? ' kc-active' : '');
+      btn.textContent = tab.name; // textContent : jamais d'HTML interprété depuis un nom saisi
+      btn.dataset.noteId = tab.id;
+      btn.addEventListener('click', () => {
+        flushNotesSave();
+        notesState.active = tab.id;
+        saveNotesState();
+        renderNotesPanel();
+      });
+      bar.appendChild(btn);
+    });
+    if (notesState.tabs.length < NOTES_MAX_TABS) {
+      const add = document.createElement('button');
+      add.type = 'button';
+      add.className = 'kc-notes-tab kc-notes-add';
+      add.textContent = '+';
+      add.title = t('notes.add');
+      add.setAttribute('aria-label', t('notes.add'));
+      add.addEventListener('click', addNotesTab);
+      bar.appendChild(add);
+    }
+  }
+
+  function renderNotesPanel() {
+    renderNotesTabs();
+    const area = document.getElementById('kc-notes-text');
+    if (area) area.value = getActiveNote().text;
+    const del = document.getElementById('kc-notes-delete');
+    if (del) del.disabled = notesState.tabs.length <= 1;
+  }
+
+  function flushNotesSave() {
+    if (notesSaveTimer) {
+      clearTimeout(notesSaveTimer);
+      notesSaveTimer = null;
+      const area = document.getElementById('kc-notes-text');
+      if (area) getActiveNote().text = area.value.slice(0, NOTES_MAX_TEXT_LENGTH);
+      saveNotesState();
+    }
+  }
+
+  function addNotesTab() {
+    flushNotesSave();
+    if (notesState.tabs.length >= NOTES_MAX_TABS) return;
+    const id = newNotesId();
+    notesState.tabs.push({ id, name: t('notes.defaultName', { n: notesState.tabs.length + 1 }), text: '' });
+    notesState.active = id;
+    saveNotesState();
+    renderNotesPanel();
+    const area = document.getElementById('kc-notes-text');
+    if (area) area.focus();
+  }
+
+  function renameNotesTab() {
+    flushNotesSave();
+    const note = getActiveNote();
+    const name = window.prompt(t('notes.renamePrompt'), note.name);
+    if (name == null) return;
+    const clean = name.trim().slice(0, NOTES_MAX_NAME_LENGTH);
+    if (!clean) return;
+    note.name = clean;
+    saveNotesState();
+    renderNotesTabs();
+  }
+
+  function deleteNotesTab() {
+    flushNotesSave();
+    if (notesState.tabs.length <= 1) return;
+    const note = getActiveNote();
+    // Supprimer sans confirmation seulement si l'onglet est vide
+    if (note.text.trim() && !window.confirm(t('notes.deleteConfirm', { name: note.name }))) return;
+    const index = notesState.tabs.indexOf(note);
+    notesState.tabs.splice(index, 1);
+    notesState.active = notesState.tabs[Math.max(0, index - 1)].id;
+    saveNotesState();
+    renderNotesPanel();
+  }
+
+  function createNotesPanel() {
+    const panel = document.createElement('div');
+    panel.id = 'kc-notes-panel';
+    panel.setAttribute('role', 'status');
+    panel.innerHTML = `
+      <span id="kc-notes-status">FoxTool — ${t('notes.title')}</span>
+      <div id="kc-notes-tabs"></div>
+      <div id="kc-notes-body">
+        <textarea id="kc-notes-text" maxlength="${NOTES_MAX_TEXT_LENGTH}" placeholder="${t('notes.placeholder')}" spellcheck="false"></textarea>
+        <p class="kc-options-hint">${t('notes.hint')}</p>
+      </div>
+      <div id="kc-notes-footer">
+        <button id="kc-notes-rename" type="button">${t('notes.rename')}</button>
+        <button id="kc-notes-delete" type="button">${t('notes.delete')}</button>
+        <button id="kc-notes-close" type="button">${t('common.close')}</button>
+      </div>
+    `;
+    document.body.appendChild(panel);
+
+    const area = panel.querySelector('#kc-notes-text');
+    area.addEventListener('input', () => {
+      if (notesSaveTimer) clearTimeout(notesSaveTimer);
+      notesSaveTimer = setTimeout(flushNotesSave, NOTES_SAVE_DELAY_MS); // enregistrement différé pendant la frappe
+    });
+    // Le jeu écoute des raccourcis clavier : on empêche la frappe dans le
+    // bloc-notes de remonter jusqu'à lui.
+    ['keydown', 'keyup', 'keypress'].forEach((evt) => area.addEventListener(evt, (e) => e.stopPropagation()));
+    // Sauvegarde aussi quand on quitte le champ ou ferme la page
+    area.addEventListener('blur', flushNotesSave);
+    window.addEventListener('beforeunload', flushNotesSave);
+
+    panel.querySelector('#kc-notes-rename').addEventListener('click', renameNotesTab);
+    panel.querySelector('#kc-notes-delete').addEventListener('click', deleteNotesTab);
+    panel.querySelector('#kc-notes-close').addEventListener('click', () => {
+      flushNotesSave();
+      closeAllPanels();
+    });
+    renderNotesPanel();
+  }
+
   // --- Badges VWAP sur la Bourse ---
   //
   // Sur une page /market/resource/{id}/, chaque ligne d'annonce porte un
@@ -4214,7 +4655,7 @@
 
   // --- Gestion commune : ouverture exclusive des panneaux ---
 
-  const OVERLAY_PANEL_IDS = ['kc-menu-panel', 'kc-xp-panel', 'kc-moderators-panel', 'kc-events-panel', 'kc-options-panel', 'kc-customization-panel', 'kc-realmstats-panel', 'kc-seasons-panel', 'kc-prices-panel', 'kc-externaltools-panel', 'kc-buildings-panel'];
+  const OVERLAY_PANEL_IDS = ['kc-menu-panel', 'kc-xp-panel', 'kc-moderators-panel', 'kc-events-panel', 'kc-options-panel', 'kc-customization-panel', 'kc-realmstats-panel', 'kc-seasons-panel', 'kc-prices-panel', 'kc-externaltools-panel', 'kc-buildings-panel', 'kc-notes-panel', 'kc-changelog-panel'];
 
   function closeAllPanels() {
     OVERLAY_PANEL_IDS.forEach((id) => {
@@ -4327,6 +4768,11 @@
 
   // Fermeture commune : clic en dehors de tout panneau/bouton, ou touche Échap
   document.addEventListener('click', (e) => {
+    // Si le bouton cliqué a été retiré de la page par son propre gestionnaire
+    // (ex. onglet du bloc-notes, dont la barre est reconstruite au clic),
+    // contains() ne le retrouve plus dans le panneau : ce n'est pas un clic
+    // « en dehors », on ne ferme rien.
+    if (e.target instanceof Node && !e.target.isConnected) return;
     const isInsideOverlay = OVERLAY_PANEL_IDS.some((id) => document.getElementById(id)?.contains(e.target));
     const isTriggerBtn = ['kc-menu-btn', 'kc-xp-toggle'].some((id) => document.getElementById(id) === e.target || document.getElementById(id)?.contains(e.target));
     if (!isInsideOverlay && !isTriggerBtn) closeAllPanels();
@@ -4340,7 +4786,7 @@
   // reconstruire à neuf (comme on le fait déjà pour l'import de réglages)
   // que de mettre à jour chaque texte affiché un par un.
   function rebuildAllPanelsForLanguageChange() {
-    ['kc-menu-btn', 'kc-menu-panel', 'kc-xp-panel', 'kc-xp-toggle', 'kc-moderators-panel', 'kc-events-panel', 'kc-options-panel', 'kc-customization-panel', 'kc-realmstats-panel', 'kc-seasons-panel', 'kc-prices-panel', 'kc-externaltools-panel', 'kc-buildings-panel'].forEach((id) => {
+    ['kc-menu-btn', 'kc-menu-panel', 'kc-xp-panel', 'kc-xp-toggle', 'kc-moderators-panel', 'kc-events-panel', 'kc-options-panel', 'kc-customization-panel', 'kc-realmstats-panel', 'kc-seasons-panel', 'kc-prices-panel', 'kc-externaltools-panel', 'kc-buildings-panel', 'kc-notes-panel', 'kc-changelog-panel'].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.remove();
     });
@@ -4358,6 +4804,8 @@
     createPricesPanel();
     createExternalToolsPanel();
     createBuildingsPanel();
+    createNotesPanel();
+    createChangelogPanel();
 
     // Rouvre le panneau Options (c'est de là que vient le changement de
     // langue) pour que le résultat soit visible immédiatement.
@@ -4395,21 +4843,17 @@
   createPricesPanel();
   createExternalToolsPanel();
   createBuildingsPanel();
+  createNotesPanel();
+  createChangelogPanel();
   const WELCOME_SHOWN_KEY = 'kc_welcome_shown_v1';
   const isFirstEverRun = !localStorage.getItem(WELCOME_SHOWN_KEY);
   if (isFirstEverRun) {
     showWelcomeToast();
     try {
       localStorage.setItem(WELCOME_SHOWN_KEY, '1');
-      // Pas de changelog en plus au tout premier lancement : le toast de
-      // bienvenue suffit. On marque direct la version actuelle comme "déjà
-      // vue" pour que le changelog ne s'affiche qu'à la prochaine mise à jour.
-      if (CURRENT_SCRIPT_VERSION) localStorage.setItem(CHANGELOG_SHOWN_KEY, CURRENT_SCRIPT_VERSION);
     } catch (err) {
       // stockage indisponible : le message pourra réapparaître, sans gravité
     }
-  } else {
-    maybeShowChangelog();
   }
   refreshXpData();
   setInterval(refreshXpData, XP_POLL_INTERVAL_MS);
