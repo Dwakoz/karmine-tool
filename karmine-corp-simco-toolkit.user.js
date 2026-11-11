@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         FoxTool (bêta)
 // @namespace    https://github.com/Dwakoz
-// @version      1.31.0
+// @version      1.33.1
 // @description  Extension communautaire pour Sim Companies, développée par le joueur TAMED FOX. Calculateur XP, modérateurs FR et plus à venir.
 // @author       TAMED FOX
 // @match        https://www.simcompanies.com/*
@@ -11,6 +11,9 @@
 // @downloadURL  https://github.com/Dwakoz/karmine-tool/raw/refs/heads/main/karmine-corp-simco-toolkit.user.js
 // @grant        GM_xmlhttpRequest
 // @grant        GM_info
+// @grant        GM_getValue
+// @grant        GM_setValue
+// @grant        GM_addValueChangeListener
 // @connect      api.simcotools.com
 // @run-at       document-idle
 // ==/UserScript==
@@ -44,6 +47,11 @@
         onSelect: () => openPanel('kc-moderators-panel'),
       },
       {
+        id: 'external-tools',
+        label: t('menu.externalTools'),
+        onSelect: () => openPanel('kc-externaltools-panel'),
+      },
+      {
         id: 'market-events',
         label: t('menu.events'),
         onSelect: () => {
@@ -57,14 +65,6 @@
         onSelect: () => {
           openPanel('kc-buildings-panel');
           refreshBuildingsPanel();
-        },
-      },
-      {
-        id: 'notes',
-        label: t('menu.notes'),
-        onSelect: () => {
-          openPanel('kc-notes-panel');
-          renderNotesPanel();
         },
       },
       {
@@ -89,14 +89,30 @@
         },
       },
       {
-        id: 'external-tools',
-        label: t('menu.externalTools'),
-        onSelect: () => openPanel('kc-externaltools-panel'),
+        id: 'notes',
+        label: t('menu.notes'),
+        onSelect: () => {
+          openPanel('kc-notes-panel');
+          renderNotesPanel();
+        },
+      },
+      {
+        id: 'calculator',
+        label: t('menu.calculator'),
+        onSelect: () => {
+          closeAllPanels();
+          toggleCalc();
+        },
       },
       {
         id: 'customization',
         label: t('menu.customization'),
         onSelect: () => openPanel('kc-customization-panel'),
+      },
+      {
+        id: 'options',
+        label: t('menu.options'),
+        onSelect: () => openPanel('kc-options-panel'),
       },
       {
         id: 'changelog',
@@ -105,11 +121,6 @@
           openPanel('kc-changelog-panel');
           renderChangelogPanel();
         },
-      },
-      {
-        id: 'options',
-        label: t('menu.options'),
-        onSelect: () => openPanel('kc-options-panel'),
       },
     ];
   }
@@ -210,10 +221,19 @@
       'menu.events': 'Événements',
       'menu.buildings': 'Bâtiments',
       'menu.notes': 'Bloc-notes',
+      'menu.calculator': 'Calculatrice',
+      'calc.title': 'Calculatrice',
+      'calc.close': 'Fermer la calculatrice',
+      'calc.clear': 'Tout effacer',
+      'calc.backspace': 'Effacer le dernier chiffre',
+      'calc.error': 'Erreur',
       'notes.title': 'Bloc-notes',
       'notes.placeholder': 'Écris tes notes ici…',
-      'notes.hint': 'Enregistré automatiquement, uniquement dans ce navigateur (rien n\'est envoyé en ligne).',
+      'notes.hint': 'Enregistré automatiquement sur ton ordinateur (rien n\'est envoyé en ligne). Exporte de temps en temps un fichier de sauvegarde.',
       'notes.defaultName': 'Note {n}',
+      'notes.export': 'Exporter (sauvegarde)',
+      'notes.import': 'Importer',
+      'notes.importConfirm': 'Remplacer tes notes actuelles par celles du fichier ?',
       'notes.add': 'Nouvel onglet',
       'notes.rename': 'Renommer',
       'notes.delete': 'Supprimer',
@@ -394,10 +414,19 @@
       'menu.events': 'Events',
       'menu.buildings': 'Buildings',
       'menu.notes': 'Notepad',
+      'menu.calculator': 'Calculator',
+      'calc.title': 'Calculator',
+      'calc.close': 'Close calculator',
+      'calc.clear': 'Clear all',
+      'calc.backspace': 'Delete last digit',
+      'calc.error': 'Error',
       'notes.title': 'Notepad',
       'notes.placeholder': 'Write your notes here…',
-      'notes.hint': 'Saved automatically, in this browser only (nothing is sent online).',
+      'notes.hint': 'Saved automatically on your computer (nothing is sent online). Export a backup file from time to time.',
       'notes.defaultName': 'Note {n}',
+      'notes.export': 'Export (backup)',
+      'notes.import': 'Import',
+      'notes.importConfirm': 'Replace your current notes with the ones from the file?',
       'notes.add': 'New tab',
       'notes.rename': 'Rename',
       'notes.delete': 'Delete',
@@ -2404,6 +2433,29 @@
       outline: 2px solid #E8A33D;
       outline-offset: 1px;
     }
+    #kc-notes-backup-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    #kc-notes-backup-row .kc-options-reset-btn {
+      margin-top: 0;
+      flex: 1;
+      text-align: center;
+    }
+    #kc-notes-import-label {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+    #kc-notes-import-label input[type='file'] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+    }
     #kc-notes-footer {
       display: flex;
       justify-content: space-between;
@@ -2437,6 +2489,125 @@
     .kc-notes-tab:focus-visible {
       outline: 2px solid #E8A33D;
       outline-offset: 2px;
+    }
+    #kc-calc {
+      position: fixed;
+      left: 24px;
+      top: 140px;
+      width: 232px;
+      background: #10151F;
+      color: #EDE6D8;
+      border-left: 4px solid #E8A33D;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      z-index: 2147482999;
+      user-select: none;
+      outline: none;
+    }
+    #kc-calc-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 6px 6px 12px;
+      background: #1B2436;
+      border-bottom: 1px solid #3E7C74;
+      cursor: grab;
+      touch-action: none;
+    }
+    #kc-calc-header.kc-dragging {
+      cursor: grabbing;
+    }
+    #kc-calc-title {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 11px;
+      letter-spacing: 0.02em;
+      color: #9FB0C3;
+    }
+    #kc-calc-close {
+      appearance: none;
+      width: 22px;
+      height: 22px;
+      padding: 0;
+      border: none;
+      background: transparent;
+      color: #9FB0C3;
+      font-size: 18px;
+      line-height: 1;
+      cursor: pointer;
+    }
+    #kc-calc-close:hover {
+      color: #EDE6D8;
+      background: rgba(224, 107, 107, 0.35);
+    }
+    #kc-calc-close:focus-visible {
+      outline: 2px solid #E8A33D;
+    }
+    #kc-calc-screen {
+      padding: 10px 12px 6px;
+      text-align: right;
+      background: #10151F;
+    }
+    #kc-calc-expr {
+      min-height: 16px;
+      font-size: 12px;
+      color: #9FB0C3;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    #kc-calc-display {
+      font-size: 26px;
+      font-weight: 600;
+      line-height: 1.25;
+      white-space: nowrap;
+      overflow: hidden;
+      font-variant-numeric: tabular-nums;
+    }
+    #kc-calc-display.kc-calc-small {
+      font-size: 17px;
+      line-height: 1.9;
+    }
+    #kc-calc-keys {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 4px;
+      padding: 6px 8px 10px;
+    }
+    .kc-calc-key {
+      appearance: none;
+      height: 38px;
+      border: 1px solid #3E7C74;
+      background: #1B2436;
+      color: #EDE6D8;
+      font-size: 15px;
+      cursor: pointer;
+      transition: background 0.12s ease;
+    }
+    .kc-calc-key:hover {
+      background: #25324A;
+    }
+    .kc-calc-key:active {
+      background: #2F4160;
+    }
+    .kc-calc-fn {
+      color: #9FB0C3;
+    }
+    .kc-calc-op {
+      color: #E8A33D;
+      font-weight: 600;
+    }
+    .kc-calc-eq {
+      background: #E8A33D;
+      border-color: #E8A33D;
+      color: #10151F;
+      font-weight: 700;
+    }
+    .kc-calc-eq:hover {
+      background: #F0B35A;
+    }
+    .kc-calc-key:focus-visible {
+      outline: 2px solid #E8A33D;
+      outline-offset: 1px;
     }
     @media (prefers-reduced-motion: reduce) {
       #kc-toast, #kc-menu-panel, #kc-xp-panel, #kc-moderators-panel, #kc-events-panel, #kc-options-panel, #kc-customization-panel, #kc-realmstats-panel, #kc-seasons-panel, #kc-prices-panel, #kc-externaltools-panel, #kc-buildings-panel, #kc-notes-panel, #kc-changelog-panel {
@@ -2567,6 +2738,22 @@
     '1.31.0': {
       fr: ['Nouveau : onglet « Nouveautés » dans le menu, avec l\'historique complet des changements. Le pop-up affiché à chaque mise à jour est supprimé.'],
       en: ['New: "What\'s new" tab in the menu, with the full change history. The popup shown on every update is removed.'],
+    },
+    '1.31.1': {
+      fr: ['Bloc-notes : sauvegarde renforcée (double stockage, partagé entre tous les onglets et entre simcompanies.com / www.simcompanies.com) pour ne plus perdre tes notes.'],
+      en: ['Notepad: stronger saving (dual storage, shared across all tabs and between simcompanies.com / www.simcompanies.com) so your notes are never lost.'],
+    },
+    '1.32.0': {
+      fr: ['Bloc-notes : boutons Exporter / Importer pour garder une sauvegarde de tes notes dans un fichier sur ton disque.'],
+      en: ['Notepad: Export / Import buttons to keep a backup of your notes as a file on your disk.'],
+    },
+    '1.33.0': {
+      fr: ['Nouveau : calculatrice flottante (menu → Calculatrice). Déplaçable par sa barre de titre, elle reste affichée sur la carte jusqu\'à ce que tu la fermes avec la croix en haut à droite ; sa position est retenue.'],
+      en: ['New: floating calculator (menu → Calculator). Drag it by its title bar; it stays on the map until you close it with the cross at the top right, and its position is remembered.'],
+    },
+    '1.33.1': {
+      fr: ['Menu réorganisé : Modérateurs, Outils externes, Événements, Bâtiments, Statistiques, Saisons, Prix du marché, Bloc-notes, Calculatrice, Personnalisation, Options, Nouveautés.'],
+      en: ['Menu reordered: Moderators, External tools, Events, Buildings, Realm stats, Seasons, Market prices, Notepad, Calculator, Customization, Options, What\'s new.'],
     },
   };
 
@@ -3569,8 +3756,8 @@
 
   // --- Bloc-notes à onglets ---
   //
-  // Notes libres stockées uniquement dans le navigateur (localStorage) :
-  // rien n'est envoyé nulle part. Plusieurs onglets, enregistrement
+  // Notes libres stockées uniquement sur ton ordinateur (Tampermonkey +
+  // navigateur) : rien n'est envoyé nulle part. Plusieurs onglets, enregistrement
   // automatique pendant la frappe.
   const NOTES_KEY = 'kc_notes_v1';
   const NOTES_MAX_TABS = 10;
@@ -3588,39 +3775,76 @@
     return { tabs: [{ id, name: t('notes.defaultName', { n: 1 }), text: '' }], active: id };
   }
 
-  function loadNotesState() {
+  // Les notes sont enregistrées à DEUX endroits :
+  //  - le stockage de Tampermonkey (GM_setValue) : propre au script, partagé
+  //    entre tous les onglets ET entre simcompanies.com / www.simcompanies.com,
+  //    et non effaçable par le jeu ou par un nettoyage des « données du site » ;
+  //  - le localStorage du site, en copie de secours.
+  // Au chargement on garde la version la plus récente des deux (updatedAt).
+  function parseNotesState(raw) {
     try {
-      const raw = localStorage.getItem(NOTES_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed && Array.isArray(parsed.tabs) && parsed.tabs.length > 0) {
-          const tabs = parsed.tabs
-            .filter((tab) => tab && typeof tab.id === 'string')
-            .map((tab) => ({
-              id: tab.id,
-              name: String(tab.name || '').slice(0, NOTES_MAX_NAME_LENGTH) || '—',
-              text: String(tab.text || '').slice(0, NOTES_MAX_TEXT_LENGTH),
-            }));
-          if (tabs.length > 0) {
-            const active = tabs.some((tab) => tab.id === parsed.active) ? parsed.active : tabs[0].id;
-            return { tabs, active };
-          }
-        }
-      }
+      const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      if (!parsed || !Array.isArray(parsed.tabs)) return null;
+      const tabs = parsed.tabs
+        .filter((tab) => tab && typeof tab.id === 'string')
+        .map((tab) => ({
+          id: tab.id,
+          name: String(tab.name || '').slice(0, NOTES_MAX_NAME_LENGTH) || '—',
+          text: String(tab.text || '').slice(0, NOTES_MAX_TEXT_LENGTH),
+        }));
+      if (tabs.length === 0) return null;
+      const active = tabs.some((tab) => tab.id === parsed.active) ? parsed.active : tabs[0].id;
+      return { tabs, active, updatedAt: Number(parsed.updatedAt) || 0 };
     } catch (err) {
-      // JSON corrompu ou stockage indisponible : on repart d'un bloc-notes vide
+      return null; // JSON corrompu : on ignore cette source
     }
-    return defaultNotesState();
+  }
+
+  function readNotesSource(readFn) {
+    try {
+      const raw = readFn();
+      return raw ? parseNotesState(raw) : null;
+    } catch (err) {
+      return null; // stockage indisponible
+    }
+  }
+
+  function loadNotesState() {
+    const fromGm = readNotesSource(() => (typeof GM_getValue === 'function' ? GM_getValue(NOTES_KEY, null) : null));
+    const fromLocal = readNotesSource(() => localStorage.getItem(NOTES_KEY));
+    const candidates = [fromGm, fromLocal].filter(Boolean);
+    if (candidates.length === 0) return defaultNotesState();
+    return candidates.sort((x, y) => y.updatedAt - x.updatedAt)[0];
   }
 
   let notesState = loadNotesState();
 
   function saveNotesState() {
+    notesState.updatedAt = Date.now();
+    const raw = JSON.stringify(notesState);
     try {
-      localStorage.setItem(NOTES_KEY, JSON.stringify(notesState));
+      if (typeof GM_setValue === 'function') GM_setValue(NOTES_KEY, raw);
     } catch (err) {
-      // quota plein ou stockage bloqué : les notes restent en mémoire pour la session
+      // stockage Tampermonkey indisponible : la copie localStorage prend le relais
     }
+    try {
+      localStorage.setItem(NOTES_KEY, raw);
+    } catch (err) {
+      // quota plein ou stockage bloqué : les notes restent au moins dans l'autre stockage
+    }
+  }
+
+  // Un autre onglet du jeu a modifié les notes : on adopte sa version pour ne
+  // jamais écraser ses changements avec un état périmé (sauf si on est en
+  // train de taper ici, auquel cas notre saisie, plus récente, l'emporte).
+  if (typeof GM_addValueChangeListener === 'function') {
+    GM_addValueChangeListener(NOTES_KEY, (name, oldValue, newValue, remote) => {
+      if (!remote || notesSaveTimer) return;
+      const remoteState = parseNotesState(newValue);
+      if (!remoteState) return;
+      notesState = remoteState;
+      if (document.getElementById('kc-notes-panel')) renderNotesPanel();
+    });
   }
 
   function getActiveNote() {
@@ -3712,6 +3936,42 @@
     renderNotesPanel();
   }
 
+  // Sauvegarde manuelle : un fichier .json sur ton disque, à l'abri de tout
+  // (nettoyage du navigateur, réinstallation de Tampermonkey, changement de PC…).
+  function exportNotesToFile() {
+    flushNotesSave();
+    const data = { foxtoolNotes: 1, exportedAt: new Date().toISOString(), tabs: notesState.tabs, active: notesState.active };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `foxtool-notes-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function importNotesFromFile(file) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const imported = parseNotesState(reader.result);
+      if (!imported) {
+        alert(t('alert.importInvalidFile'));
+        return;
+      }
+      flushNotesSave();
+      const hasContent = notesState.tabs.some((tab) => tab.text.trim());
+      if (hasContent && !window.confirm(t('notes.importConfirm'))) return;
+      notesState = imported;
+      saveNotesState();
+      renderNotesPanel();
+    };
+    reader.onerror = () => alert(t('alert.importReadFailed'));
+    reader.readAsText(file);
+  }
+
   function createNotesPanel() {
     const panel = document.createElement('div');
     panel.id = 'kc-notes-panel';
@@ -3722,6 +3982,13 @@
       <div id="kc-notes-body">
         <textarea id="kc-notes-text" maxlength="${NOTES_MAX_TEXT_LENGTH}" placeholder="${t('notes.placeholder')}" spellcheck="false"></textarea>
         <p class="kc-options-hint">${t('notes.hint')}</p>
+        <div id="kc-notes-backup-row">
+          <button id="kc-notes-export" type="button" class="kc-options-reset-btn">${t('notes.export')}</button>
+          <label id="kc-notes-import-label" class="kc-options-reset-btn">
+            ${t('notes.import')}
+            <input type="file" id="kc-notes-import" accept="application/json" />
+          </label>
+        </div>
       </div>
       <div id="kc-notes-footer">
         <button id="kc-notes-rename" type="button">${t('notes.rename')}</button>
@@ -3743,6 +4010,11 @@
     area.addEventListener('blur', flushNotesSave);
     window.addEventListener('beforeunload', flushNotesSave);
 
+    panel.querySelector('#kc-notes-export').addEventListener('click', exportNotesToFile);
+    panel.querySelector('#kc-notes-import').addEventListener('change', (e) => {
+      importNotesFromFile(e.target.files && e.target.files[0]);
+      e.target.value = ''; // permet de réimporter le même fichier
+    });
     panel.querySelector('#kc-notes-rename').addEventListener('click', renameNotesTab);
     panel.querySelector('#kc-notes-delete').addEventListener('click', deleteNotesTab);
     panel.querySelector('#kc-notes-close').addEventListener('click', () => {
@@ -3751,6 +4023,333 @@
     });
     renderNotesPanel();
   }
+
+  // --- Calculatrice flottante ---
+  //
+  // Fenêtre déplaçable (par la barre de titre) qui reste affichée tant qu'on
+  // ne la ferme pas avec la croix : elle ne fait PAS partie des panneaux à
+  // fermeture automatique (clic en dehors / autre panneau). Position et état
+  // ouvert/fermé sont mémorisés. Aucun eval : le calcul est fait à la main.
+  const CALC_KEY = 'kc_calc_v1';
+  const CALC_DEFAULT_POS = { x: 24, y: 140 };
+  const CALC_MAX_DIGITS = 15;
+  const CALC_MIN_VISIBLE_PX = 48; // partie de la barre de titre toujours atteignable à l'écran
+
+  function loadCalcUi() {
+    let parsed = null;
+    try {
+      if (typeof GM_getValue === 'function') parsed = JSON.parse(GM_getValue(CALC_KEY, 'null'));
+    } catch (err) {
+      parsed = null;
+    }
+    if (!parsed) {
+      try {
+        parsed = JSON.parse(localStorage.getItem(CALC_KEY) || 'null');
+      } catch (err) {
+        parsed = null;
+      }
+    }
+    const x = parsed && Number.isFinite(parsed.x) ? parsed.x : CALC_DEFAULT_POS.x;
+    const y = parsed && Number.isFinite(parsed.y) ? parsed.y : CALC_DEFAULT_POS.y;
+    return { open: !!(parsed && parsed.open), x, y };
+  }
+
+  let calcUi = loadCalcUi();
+
+  function saveCalcUi() {
+    const raw = JSON.stringify(calcUi);
+    try {
+      if (typeof GM_setValue === 'function') GM_setValue(CALC_KEY, raw);
+    } catch (err) {
+      // stockage Tampermonkey indisponible : la copie localStorage suffit
+    }
+    try {
+      localStorage.setItem(CALC_KEY, raw);
+    } catch (err) {
+      // stockage bloqué : la position ne sera simplement pas retenue
+    }
+  }
+
+  // Moteur de calcul (état conservé même si la fenêtre est reconstruite)
+  let calc = { cur: '0', prev: null, op: null, awaiting: false, done: false, expr: '', error: false };
+
+  function calcReset() {
+    calc = { cur: '0', prev: null, op: null, awaiting: false, done: false, expr: '', error: false };
+  }
+
+  function calcRound(n) {
+    return Number(n.toPrecision(12)); // évite 0,1 + 0,2 = 0,30000000000000004
+  }
+
+  function calcNumToString(n) {
+    if (!Number.isFinite(n)) return null;
+    const r = calcRound(n);
+    if (Math.abs(r) >= 1e15 || (r !== 0 && Math.abs(r) < 1e-9)) return r.toExponential(6).replace(/\.?0+e/, 'e');
+    return String(r);
+  }
+
+  function calcCompute(a, b, op) {
+    switch (op) {
+      case '+': return a + b;
+      case '-': return a - b;
+      case '*': return a * b;
+      case '/': return b === 0 ? NaN : a / b;
+      default: return b;
+    }
+  }
+
+  function calcSetResult(n) {
+    const str = calcNumToString(n);
+    if (str == null) {
+      calc.error = true;
+      calc.cur = '0';
+      return false;
+    }
+    calc.cur = str;
+    return true;
+  }
+
+  function calcDigit(d) {
+    if (calc.error) calcReset();
+    if (calc.done) {
+      calc.cur = '0';
+      calc.prev = null;
+      calc.op = null;
+      calc.expr = '';
+      calc.done = false;
+    }
+    if (calc.awaiting) {
+      calc.cur = '0';
+      calc.awaiting = false;
+    }
+    const digits = calc.cur.replace(/[^0-9]/g, '').length;
+    if (digits >= CALC_MAX_DIGITS) return;
+    if (calc.cur === '0') calc.cur = d;
+    else if (calc.cur === '-0') calc.cur = '-' + d;
+    else calc.cur += d;
+  }
+
+  function calcDot() {
+    if (calc.error) calcReset();
+    if (calc.done) {
+      calcReset();
+    }
+    if (calc.awaiting) {
+      calc.cur = '0';
+      calc.awaiting = false;
+    }
+    if (!calc.cur.includes('.')) calc.cur += '.';
+  }
+
+  function calcOperator(op) {
+    if (calc.error) return;
+    if (calc.op && !calc.awaiting) {
+      // enchaînement : 2 + 3 + … calcule d'abord 2 + 3
+      if (!calcSetResult(calcCompute(calc.prev, parseFloat(calc.cur), calc.op))) return;
+    }
+    calc.prev = parseFloat(calc.cur);
+    calc.op = op;
+    calc.awaiting = true;
+    calc.done = false;
+    calc.expr = calcFormat(calcNumToString(calc.prev)) + ' ' + calcOpSymbol(op);
+  }
+
+  function calcEquals() {
+    if (calc.error || !calc.op) return;
+    const b = calc.awaiting ? calc.prev : parseFloat(calc.cur); // « 5 × = » → 5 × 5
+    const left = calcFormat(calcNumToString(calc.prev));
+    const right = calcFormat(calcNumToString(b));
+    const result = calcCompute(calc.prev, b, calc.op);
+    const symbol = calcOpSymbol(calc.op);
+    if (calcSetResult(result)) calc.expr = left + ' ' + symbol + ' ' + right + ' =';
+    else calc.expr = '';
+    calc.prev = null;
+    calc.op = null;
+    calc.awaiting = false;
+    calc.done = true;
+  }
+
+  function calcPercent() {
+    if (calc.error) return;
+    const value = parseFloat(calc.cur);
+    let result;
+    if (calc.op && !calc.awaiting && (calc.op === '+' || calc.op === '-')) result = (calc.prev * value) / 100; // 200 + 10 % → 20
+    else result = value / 100;
+    calcSetResult(result);
+    calc.done = false;
+    calc.awaiting = false;
+  }
+
+  function calcNegate() {
+    if (calc.error || calc.cur === '0') return;
+    calc.cur = calc.cur.startsWith('-') ? calc.cur.slice(1) : '-' + calc.cur;
+  }
+
+  function calcBackspace() {
+    if (calc.error) return calcReset();
+    if (calc.done || calc.awaiting) return;
+    calc.cur = calc.cur.slice(0, -1);
+    if (calc.cur === '' || calc.cur === '-') calc.cur = '0';
+  }
+
+  function calcOpSymbol(op) {
+    return { '+': '+', '-': '−', '*': '×', '/': '÷' }[op] || op;
+  }
+
+  // 1234567.5 → « 1 234 567,5 » (séparateur décimal selon la langue)
+  function calcFormat(str) {
+    if (str == null) return '';
+    if (/e/i.test(str)) return str.replace('.', currentLanguage === 'fr' ? ',' : '.');
+    const neg = str.startsWith('-');
+    const body = neg ? str.slice(1) : str;
+    const [intPart, decPart] = body.split('.');
+    const grouped = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    const sep = currentLanguage === 'fr' ? ',' : '.';
+    return (neg ? '-' : '') + grouped + (decPart !== undefined ? sep + decPart : '');
+  }
+
+  function renderCalc() {
+    const display = document.getElementById('kc-calc-display');
+    const expr = document.getElementById('kc-calc-expr');
+    if (!display || !expr) return;
+    display.textContent = calc.error ? t('calc.error') : calcFormat(calc.cur);
+    expr.textContent = calc.expr || ' ';
+    // police réduite quand le nombre est long, pour qu'il reste lisible
+    display.classList.toggle('kc-calc-small', display.textContent.length > 12);
+  }
+
+  function calcPress(key) {
+    if (/^[0-9]$/.test(key)) calcDigit(key);
+    else if (key === '.') calcDot();
+    else if (['+', '-', '*', '/'].includes(key)) calcOperator(key);
+    else if (key === '=') calcEquals();
+    else if (key === '%') calcPercent();
+    else if (key === 'neg') calcNegate();
+    else if (key === 'back') calcBackspace();
+    else if (key === 'clear') calcReset();
+    renderCalc();
+  }
+
+  function clampCalcPosition(x, y, el) {
+    const w = (el && el.offsetWidth) || 232; // 0 quand la fenêtre est masquée : on prend alors sa largeur CSS
+    const maxX = Math.max(0, window.innerWidth - Math.min(w, CALC_MIN_VISIBLE_PX));
+    const maxY = Math.max(0, window.innerHeight - 40);
+    return { x: Math.min(Math.max(x - 0, -(w - CALC_MIN_VISIBLE_PX)), maxX), y: Math.min(Math.max(y, 0), maxY) };
+  }
+
+  function applyCalcPosition() {
+    const el = document.getElementById('kc-calc');
+    if (!el) return;
+    const pos = clampCalcPosition(calcUi.x, calcUi.y, el);
+    el.style.left = pos.x + 'px';
+    el.style.top = pos.y + 'px';
+  }
+
+  function setCalcOpen(open) {
+    calcUi.open = open;
+    const el = document.getElementById('kc-calc');
+    if (el) el.style.display = open ? 'block' : 'none';
+    if (open) {
+      applyCalcPosition();
+      renderCalc();
+    }
+    saveCalcUi();
+  }
+
+  function toggleCalc() {
+    setCalcOpen(!calcUi.open);
+  }
+
+  function createCalcWidget() {
+    const el = document.createElement('div');
+    el.id = 'kc-calc';
+    el.setAttribute('role', 'group');
+    el.setAttribute('aria-label', t('calc.title'));
+    el.tabIndex = -1;
+    el.style.display = 'none';
+    const keys = [
+      ['clear', 'C', 'kc-calc-fn', t('calc.clear')],
+      ['back', '⌫', 'kc-calc-fn', t('calc.backspace')],
+      ['%', '%', 'kc-calc-fn', ''],
+      ['/', '÷', 'kc-calc-op', ''],
+      ['7', '7'], ['8', '8'], ['9', '9'], ['*', '×', 'kc-calc-op', ''],
+      ['4', '4'], ['5', '5'], ['6', '6'], ['-', '−', 'kc-calc-op', ''],
+      ['1', '1'], ['2', '2'], ['3', '3'], ['+', '+', 'kc-calc-op', ''],
+      ['neg', '±', 'kc-calc-fn', ''], ['0', '0'], ['.', currentLanguage === 'fr' ? ',' : '.'], ['=', '=', 'kc-calc-eq', ''],
+    ];
+    el.innerHTML = `
+      <div id="kc-calc-header">
+        <span id="kc-calc-title">${t('calc.title')}</span>
+        <button id="kc-calc-close" type="button" aria-label="${t('calc.close')}" title="${t('calc.close')}">×</button>
+      </div>
+      <div id="kc-calc-screen">
+        <div id="kc-calc-expr">&nbsp;</div>
+        <div id="kc-calc-display">0</div>
+      </div>
+      <div id="kc-calc-keys">
+        ${keys
+          .map(([k, label, cls, tip]) => `<button type="button" class="kc-calc-key ${cls || ''}" data-key="${k}"${tip ? ` title="${tip}" aria-label="${tip}"` : ''}>${label}</button>`)
+          .join('')}
+      </div>
+    `;
+    document.body.appendChild(el);
+
+    el.querySelector('#kc-calc-keys').addEventListener('click', (e) => {
+      const btn = e.target.closest('.kc-calc-key');
+      if (btn) calcPress(btn.dataset.key);
+    });
+    el.querySelector('#kc-calc-close').addEventListener('click', () => setCalcOpen(false));
+
+    // Clavier : seulement quand la calculatrice a le focus, sans jamais
+    // laisser la frappe remonter jusqu'aux raccourcis du jeu.
+    const keyMap = { ',': '.', x: '*', X: '*', Enter: '=', Delete: 'clear', Escape: 'clear', Backspace: 'back' };
+    ['keyup', 'keypress'].forEach((evt) => el.addEventListener(evt, (e) => e.stopPropagation()));
+    el.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const key = keyMap[e.key] || e.key;
+      if (/^[0-9]$/.test(key) || ['.', '+', '-', '*', '/', '=', '%', 'clear', 'back'].includes(key)) {
+        e.preventDefault();
+        calcPress(key);
+      }
+    });
+    el.addEventListener('pointerdown', () => el.focus({ preventScroll: true }));
+
+    // Déplacement par la barre de titre (souris et tactile)
+    const header = el.querySelector('#kc-calc-header');
+    let drag = null;
+    header.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('#kc-calc-close')) return;
+      drag = { dx: e.clientX - (parseFloat(el.style.left) || 0), dy: e.clientY - (parseFloat(el.style.top) || 0), id: e.pointerId };
+      if (header.setPointerCapture) header.setPointerCapture(e.pointerId);
+      header.classList.add('kc-dragging');
+      e.preventDefault();
+    });
+    header.addEventListener('pointermove', (e) => {
+      if (!drag || e.pointerId !== drag.id) return;
+      calcUi.x = e.clientX - drag.dx;
+      calcUi.y = e.clientY - drag.dy;
+      applyCalcPosition();
+    });
+    const endDrag = (e) => {
+      if (!drag || e.pointerId !== drag.id) return;
+      drag = null;
+      header.classList.remove('kc-dragging');
+      const pos = clampCalcPosition(calcUi.x, calcUi.y, el);
+      calcUi.x = pos.x;
+      calcUi.y = pos.y;
+      saveCalcUi();
+    };
+    header.addEventListener('pointerup', endDrag);
+    header.addEventListener('pointercancel', endDrag);
+
+    applyCalcPosition();
+    renderCalc();
+    if (calcUi.open) el.style.display = 'block';
+  }
+
+  // Si la fenêtre du navigateur rétrécit, la calculatrice ne doit pas rester hors d'écran
+  window.addEventListener('resize', applyCalcPosition);
 
   // --- Badges VWAP sur la Bourse ---
   //
@@ -4773,6 +5372,7 @@
     // contains() ne le retrouve plus dans le panneau : ce n'est pas un clic
     // « en dehors », on ne ferme rien.
     if (e.target instanceof Node && !e.target.isConnected) return;
+    if (e.target instanceof Element && e.target.closest('#kc-calc')) return; // fenêtre flottante : ne ferme pas les panneaux
     const isInsideOverlay = OVERLAY_PANEL_IDS.some((id) => document.getElementById(id)?.contains(e.target));
     const isTriggerBtn = ['kc-menu-btn', 'kc-xp-toggle'].some((id) => document.getElementById(id) === e.target || document.getElementById(id)?.contains(e.target));
     if (!isInsideOverlay && !isTriggerBtn) closeAllPanels();
@@ -4786,7 +5386,7 @@
   // reconstruire à neuf (comme on le fait déjà pour l'import de réglages)
   // que de mettre à jour chaque texte affiché un par un.
   function rebuildAllPanelsForLanguageChange() {
-    ['kc-menu-btn', 'kc-menu-panel', 'kc-xp-panel', 'kc-xp-toggle', 'kc-moderators-panel', 'kc-events-panel', 'kc-options-panel', 'kc-customization-panel', 'kc-realmstats-panel', 'kc-seasons-panel', 'kc-prices-panel', 'kc-externaltools-panel', 'kc-buildings-panel', 'kc-notes-panel', 'kc-changelog-panel'].forEach((id) => {
+    ['kc-menu-btn', 'kc-menu-panel', 'kc-xp-panel', 'kc-xp-toggle', 'kc-moderators-panel', 'kc-events-panel', 'kc-options-panel', 'kc-customization-panel', 'kc-realmstats-panel', 'kc-seasons-panel', 'kc-prices-panel', 'kc-externaltools-panel', 'kc-buildings-panel', 'kc-notes-panel', 'kc-changelog-panel', 'kc-calc'].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.remove();
     });
@@ -4806,6 +5406,7 @@
     createBuildingsPanel();
     createNotesPanel();
     createChangelogPanel();
+    createCalcWidget();
 
     // Rouvre le panneau Options (c'est de là que vient le changement de
     // langue) pour que le résultat soit visible immédiatement.
@@ -4845,6 +5446,7 @@
   createBuildingsPanel();
   createNotesPanel();
   createChangelogPanel();
+  createCalcWidget();
   const WELCOME_SHOWN_KEY = 'kc_welcome_shown_v1';
   const isFirstEverRun = !localStorage.getItem(WELCOME_SHOWN_KEY);
   if (isFirstEverRun) {
